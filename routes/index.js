@@ -1,6 +1,6 @@
 var express = require('express');
 const { ws } = require('./users');
-const ws_server = require('./../ws_server')
+
 var router = express.Router();
 
 /* GET home page. */

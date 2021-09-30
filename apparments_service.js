@@ -2,6 +2,7 @@ const NodeCache = require( "node-cache" );
 const axios = require('axios');
 const xml2js = require('xml2js');
 const mapper = require('./mapper')
+const ws_server = require('./ws_server')
 
 const xmlParser = new xml2js.Parser()
 
@@ -11,17 +12,18 @@ const apiClient = axios.create({
   });
 
 const allAppartmentsIdCache = new NodeCache({ stdTTL: 86400, checkperiod: 21600 });
-const allAppartmentsCache = new NodeCache({ stdTTL: 86400, checkperiod: 21600 });
+const allAppartmentsRenewCache = new NodeCache({ stdTTL: 86400, checkperiod: 10800 });
+const pesistenceCache = new NodeCache();
 
 const ALL_APPARTMENTS_IDS_CACHE_KEY = "allAppartmentsIdKey"
 
 const getAllAppartmentIds = new Promise((resolve, reject)=>{
-  let appartementsIds = allAppartmentsIdCache.get(ALL_APPARTMENTS_CACHE_KEY);
+  let appartementsIds = allAppartmentsIdCache.get(ALL_APPARTMENTS_IDS_CACHE_KEY);
   if (appartementsIds == undefined){
     apiClient.get('/xml/filter3.asp?siteID=68&propertycode_only=1').then(response => {
       xmlParser.parseStringPromise(response.data).then(json => {
         appartementsIds = mapper.getAppartementsFromAPIJson(json)
-        allAppartmentsIdCache.set(ALL_APPARTMENTS_CACHE_KEY, appartementsIds)
+        allAppartmentsIdCache.set(ALL_APPARTMENTS_IDS_CACHE_KEY, appartementsIds)
         resolve(appartementsIds)
       }).catch(error => {
         console.log(error)
@@ -36,18 +38,19 @@ const getAllAppartmentIds = new Promise((resolve, reject)=>{
   }
 })
 
-const getAppartementById = (appartementId) =>
+const getAppartementByIdRenew = (appartementId) =>
 {
  return new Promise((resolve, reject) =>
  {
-  getAllAppartmentIds().then(allAppartmentsIds => {
+  getAllAppartmentIds.then(allAppartmentsIds => {
     if (allAppartmentsIds.includes(appartementId)){
-      let appartementInfo = allAppartmentsCache.get(appartementId)
+      let appartementInfo = allAppartmentsRenewCache.get(appartementId)
       if (appartementInfo == undefined){
         apiClient.get(`/xml/property_xml.asp?id=${appartementId}&siteID=68`).then((response) => {
           xmlParser.parseStringPromise(response.data).then(json => {
             appartementInfo = mapper.getAppartementInfoFromAPIJson(json)
-            allAppartmentsCache.set(appartementId, appartementInfo)
+            allAppartmentsRenewCache.set(appartementId, appartementInfo)
+            pesistenceCache.set(appartementId, appartementInfo)
             resolve(appartementsIds)
           }).catch(error => {
             console.log(error)
@@ -60,11 +63,48 @@ const getAppartementById = (appartementId) =>
     } else {
       reject(Error("Appartement not exist."))
     }
-  }).catch(reject(Error("Error retrieving all ids")))
+  }).catch(error => reject(error))
+  
+ });
+};
+
+const updateAppartementInfo = (appartementId, appartementInfo) =>
+{
+ return new Promise((resolve, reject) =>
+ {
+  getAllAppartmentIds.then(allAppartmentsIds => {
+    if (allAppartmentsIds.includes(appartementId)){
+      let appartementPrevioustInfo = pesistenceCache.get(appartementId)
+      if (appartementPrevioustInfo == undefined){
+        reject(Error("Appartement not persisted"))
+      }else{
+        pesistenceCache.set(appartementId, appartementInfo)
+        resolve(appartementInfo)
+      }
+    } else {
+      reject(Error("Appartement not exist."))
+    }
+  }).catch(error => reject(error))
+  
+ });
+};
+
+const updateAppartementInfoAndEmmitWs = (appartementId, appartementInfo) =>
+{
+ return new Promise((resolve, reject) =>
+ {
+  updateAppartementInfo(appartementId, appartementInfo).then(
+    (retrievedInfo) => {
+      ws_server.send(retrievedInfo)
+      resolve(retrievedInfo)
+    }
+  ).catch(error => reject(error))
   
  });
 };
 
 module.exports = {
-    getAllAppartmentIds
+    getAllAppartmentIds,
+    getAppartementByIdRenew,
+    updateAppartementInfo
 };

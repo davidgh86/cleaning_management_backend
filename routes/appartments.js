@@ -4,10 +4,20 @@ var appartementsService = require('../apparments_service')
 
 /* GET users listing. */
 router.get('/', function(req, res, next) {
-  appartementsService.getAllAppartments.then((json) => {
+  appartementsService.getAllAppartmentIds.then((json) => {
     res.json(json)
   }).catch((error) => {
-    res.send("Error")
+    res.send(error.message)
+  });
+});
+
+/* GET users listing. */
+router.get('/renew/:appartementId', function(req, res, next) {
+  let appartementId = req.params.appartementId;
+  appartementsService.getAppartementByIdRenew(appartementId).then((json) => {
+    res.json(json)
+  }).catch((error) => {
+    res.send(error.message)
   });
 });
 
