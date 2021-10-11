@@ -21,6 +21,11 @@ router.post('/login', function(req, res, next) {
     if (!users[username] || users[username].password !== password) {
         res.status(401).send({message: "Not valid credentials"})
     }else {
-        res.status(200).send({ token : authService.createToken(username, users[username].role)})
+        res.status(200).send({ 
+            token : authService.createToken(username, users[username].role),
+            role: users[username].role
+        })
     }
 });
+
+module.exports = router;

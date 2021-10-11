@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node ./bin/www",
     "serve": "node app.js",
-    "test": "jest"
+    "test": "jest",
+    "hotreload": "nodemon server.js -e ejs,js,css,html,png,scss"
   },
   "dependencies": {
     "axios": "^0.21.4",
@@ -19,6 +20,9 @@
     "http-errors": "~1.6.3",
     "jade": "~1.11.0",
     "jest": "^27.2.2",
+    "jwt-simple": "^0.5.6",
+    "livereload": "^0.9.3",
+    "moment": "^2.29.1",
     "morgan": "~1.9.1",
     "node-cache": "^5.1.2",
     "ws": "^8.2.2",
