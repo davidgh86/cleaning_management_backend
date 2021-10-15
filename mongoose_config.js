@@ -1,0 +1,44 @@
+const mongoose = require('mongoose')
+const mongoosePaginate = require('mongoose-paginate-v2');
+
+mongoose.connect('mongodb://user:pwd@localhost:27017/cleaning');
+
+const Schema = mongoose.Schema;
+
+const UserSchema = new Schema({
+    username: { type: String, required: true, unique: true, index: true},
+    password: { type: String, required: true, select: false },
+    role: { type: String, required: true },
+    email: { type: String, required: true, unique: true},
+});
+UserSchema.plugin(mongoosePaginate);
+
+const ApartmentSchema = new Schema({
+    code: { type: Number, required: true, unique: true, index: true},
+    apartmentName: { type: String, required: true, unique: true },
+    keys: Number
+})
+
+const StatusChangeSchema = new Schema({
+    cleaningStatus: { type: String, required: true },
+    changeStatusDate: { type: Date, required: true },
+})
+
+const ArrivalSchema = new Schema({
+    apartmentCode: { type: Number, required: true, index: true},
+    expectedKeys: Number,
+    returnedKeys: Number,
+    arrivalDate: { type: Date, required: true, index: true},
+    cleaningStatus: [StatusChangeSchema],
+    timeCleaned: { type: Date, required: true, index: true},
+    message: String,
+})
+
+const User = mongoose.model('User', UserSchema)
+const Apartment = mongoose.model('Apartment', ApartmentSchema)
+const StatusChange = mongoose.model('StatusChange', StatusChangeSchema)
+const Arrival = mongoose.model('Arrival', ArrivalSchema)
+
+const models = { User, Apartment, StatusChange, Arrival }
+
+module.exports = models;

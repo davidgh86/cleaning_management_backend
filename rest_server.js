@@ -7,7 +7,7 @@ var logger = require('morgan');
 //var bodyParser = require('body-parser');
 var cors = require('cors');
 
-var securityFilter = require('./security_filter');
+const securityFilter = require('./security_filter');
 
 var appartementsRouter = require('./routes/appartments');
 var usersRouter = require('./routes/user');

@@ -7,7 +7,6 @@ exports.createToken = function (username, role) {
   // TODO check if must send password
   var payload = {
     username: username,
-    //password: password,
     role: role,
     iat: moment().unix(),
     exp: moment().add(14, "days").unix(),
