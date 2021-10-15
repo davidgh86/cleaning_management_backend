@@ -17,10 +17,8 @@ exports.ensureAuthenticated = function (req, res, next) {
     return res.status(401).send({ message: "token has expired" });
   }
 
-  // TODO check if must send password
   req.userData = {
       username: payload.username,
-      //password: payload.password,
       role: payload.role
     }
   next();

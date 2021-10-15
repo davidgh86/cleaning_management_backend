@@ -4,7 +4,7 @@ var authService = require("../auth_service");
 
 const users = {
     "user" : {
-        password : "housekeeping",
+        password : "user",
         role : "user"
     },
     "admin" : {
@@ -23,6 +23,7 @@ router.post('/login', function(req, res, next) {
     }else {
         res.status(200).send({ 
             token : authService.createToken(username, users[username].role),
+            user: username,
             role: users[username].role
         })
     }
