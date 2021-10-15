@@ -63,9 +63,9 @@ router.put('/:username', securityFilter.ensureIsAdmin, function(req, res, next) 
             res.status(404).send({message: "Not found"})
             return;
         }
-        
-        user.role = newData.role
+
         user.email = newData.email
+        user.password = newData.password
         
         user.save().then((savedUser) => {
             res.status(200).send(savedUser)
