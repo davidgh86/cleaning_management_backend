@@ -7,8 +7,15 @@ const ensureIsAdmin = require('./../security_filter').ensureIsAdmin;
 
 router.post('/login', function(req, res, next) {
 
-    let inputUsername = req.body.username;
-    let inputPassword = req.body.password;
+    let auth = req.header('Authorization')
+    if (!auth) {
+        res.status(401).send({message: "Not valid credentials"})
+        return
+    }
+
+    let inputUsername;
+    let inputPassword;
+    ({ inputUsername, inputPassword } = decodeBase64Credentials(auth));
 
     User.findOne( {'username' : inputUsername}, 'username password role' ).then(user => {
         if (!user || !user.username || !user.password || user.username !== inputUsername || user.password !== inputPassword) {
@@ -191,3 +198,12 @@ router.get('/:username', ensureIsAdmin, function(req, res, next) {
 
 
 module.exports = router;
+
+function decodeBase64Credentials(auth) {
+    let credentials = Buffer.from(auth.split(" ")[1].trim(), 'base64');
+    credentials = credentials.toString('utf8').split(":");
+
+    let inputUsername = credentials[0];
+    let inputPassword = credentials[1];
+    return { inputUsername, inputPassword };
+}
