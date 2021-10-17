@@ -11,6 +11,7 @@ const securityFilter = require('./security_filter');
 
 var appartementsRouter = require('./routes/appartments');
 var usersRouter = require('./routes/user');
+var arrivalsRouter = require('./routes/arrivals');
 
 var app = express();
 
@@ -43,7 +44,8 @@ app.use(unless('/user/login', securityFilter.ensureAuthenticated))
 // app.use(bodyParser.urlencoded({extended: true}));
 
 app.use('/user', usersRouter);
-app.use('/appartements', appartementsRouter);
+app.use('/apartment', appartementsRouter);
+app.use('/arrival', arrivalsRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

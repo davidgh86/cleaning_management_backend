@@ -18,6 +18,7 @@ const ApartmentSchema = new Schema({
     apartmentName: { type: String, required: true, unique: true },
     keys: Number
 })
+ApartmentSchema.plugin(mongoosePaginate);
 
 const StatusChangeSchema = new Schema({
     cleaningStatus: { type: String, required: true },
@@ -25,14 +26,16 @@ const StatusChangeSchema = new Schema({
 })
 
 const ArrivalSchema = new Schema({
-    apartmentCode: { type: Number, required: true, index: true},
+    apartmentCode: { type: Number, required: true },
     expectedKeys: Number,
     returnedKeys: Number,
-    arrivalDate: { type: Date, required: true, index: true},
+    arrivalDate: { type: Date, required: true },
     cleaningStatus: [StatusChangeSchema],
-    timeCleaned: { type: Date, required: true, index: true},
+    timeCleaned: Date,
     message: String,
 })
+ArrivalSchema.index({ apartmentCode: 1, arrivalDate: 1 }, { unique: true })
+ArrivalSchema.plugin(mongoosePaginate);
 
 const User = mongoose.model('User', UserSchema)
 const Apartment = mongoose.model('Apartment', ApartmentSchema)

@@ -1,8 +1,8 @@
 var express = require('express');
 var router = express.Router();
 var authService = require("../auth_service");
-const db = require("../mongoose_config")
-const securityFilter = require('./../security_filter');
+const User = require("../mongoose_config").User;
+const ensureIsAdmin = require('./../security_filter').ensureIsAdmin;
 
 
 router.post('/login', function(req, res, next) {
@@ -10,7 +10,7 @@ router.post('/login', function(req, res, next) {
     let inputUsername = req.body.username;
     let inputPassword = req.body.password;
 
-    db.User.findOne( {'username' : inputUsername}, 'username password role' ).then(user => {
+    User.findOne( {'username' : inputUsername}, 'username password role' ).then(user => {
         if (!user || !user.username || !user.password || user.username !== inputUsername || user.password !== inputPassword) {
             res.status(401).send({message: "Not valid credentials"})
         } else {
@@ -26,9 +26,9 @@ router.post('/login', function(req, res, next) {
     
 });
 
-router.post('/register', securityFilter.ensureIsAdmin, function(req, res, next) {
+router.post('/register', ensureIsAdmin, function(req, res, next) {
 
-    const userEntity = new db.User(req.body)
+    const userEntity = new User(req.body)
     
     userEntity.save().then((savedUser) => {
         
@@ -45,7 +45,7 @@ router.post('/register', securityFilter.ensureIsAdmin, function(req, res, next) 
     
 });
 
-router.put('/:username', securityFilter.ensureIsAdmin, function(req, res, next) {
+router.put('/:username', ensureIsAdmin, function(req, res, next) {
 
     const username = req.params.username
 
@@ -58,7 +58,7 @@ router.put('/:username', securityFilter.ensureIsAdmin, function(req, res, next) 
         return;
     }
 
-    db.User.findOne( {'username' : username} ).then(user => {
+    User.findOne( {'username' : username} ).then(user => {
         if (!user){
             res.status(404).send({message: "Not found"})
             return;
@@ -81,11 +81,11 @@ router.put('/:username', securityFilter.ensureIsAdmin, function(req, res, next) 
     })
 });
 
-router.delete('/:username', securityFilter.ensureIsAdmin, function(req, res, next) {
+router.delete('/:username', ensureIsAdmin, function(req, res, next) {
 
     const username = req.params.username
 
-    db.User.findOneAndDelete( {'username' : username} ).then(user => {
+    User.findOneAndDelete( {'username' : username} ).then(user => {
         if (!user){
             res.status(404).send({message: "Not found"})
             return;
@@ -111,7 +111,7 @@ router.put('/me', function(req, res, next) {
         return;
     }
 
-    db.User.findOne( {'username' : username} ).then(user => {
+    User.findOne( {'username' : username} ).then(user => {
         if (!user){
             res.status(404).send({message: "Not found"})
             return;
@@ -134,12 +134,12 @@ router.put('/me', function(req, res, next) {
     })
 });
 
-router.get('', securityFilter.ensureIsAdmin, function(req, res, next) {
+router.get('', ensureIsAdmin, function(req, res, next) {
 
     let offset = req.query.offset
     let limit = req.query.limit
     
-    db.User.paginate({}, { 
+    User.paginate({}, { 
         sort : { username: "asc"}, 
         offset: offset,
         limit: limit
@@ -157,7 +157,7 @@ router.get('/me', function(req, res, next) {
 
     const username = req.userData.username
 
-    db.User.findOne( {'username' : username} ).then(user => {
+    User.findOne( {'username' : username} ).then(user => {
         if (!!user){
             res.status(200).send(user)
         } else {
@@ -171,11 +171,11 @@ router.get('/me', function(req, res, next) {
     
 });
 
-router.get('/:username', securityFilter.ensureIsAdmin, function(req, res, next) {
+router.get('/:username', ensureIsAdmin, function(req, res, next) {
 
     const username = req.params.username
 
-    db.User.findOne( {'username' : username} ).then(user => {
+    User.findOne( {'username' : username} ).then(user => {
         if (!!user){
             res.status(200).send(user)
         } else {
