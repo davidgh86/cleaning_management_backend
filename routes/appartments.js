@@ -41,7 +41,7 @@ router.get('/:apartmentCode', function(req, res, next) {
 
   const apartmentCode = req.params.apartmentCode
 
-  Apartment.findOne( {'code' : apartmentCode} ).then(apartment => {
+  Apartment.findById( apartmentCode ).then(apartment => {
       if (!!apartment){
           res.status(200).send(apartment)
       } else {
@@ -56,18 +56,11 @@ router.get('/:apartmentCode', function(req, res, next) {
 
 router.put('/:apartmentCode', ensureIsAdmin, function(req, res, next) {
 
-  const apartmentCode = parseInt(req.params.apartmentCode)
+  const apartmentCode = req.params.apartmentCode
 
   let newData = req.body
 
-  if (apartmentCode !== req.body.code){
-      res.status(400).send({
-          message : "Not valid data"
-      });
-      return;
-  }
-
-  Apartment.findOne( {'code' : apartmentCode} ).then(apartment => {
+  Apartment.findById( apartmentCode ).then(apartment => {
       if (!apartment){
           res.status(404).send({message: "Not found"})
           return;
@@ -94,7 +87,7 @@ router.delete('/:apartmentCode', ensureIsAdmin, function(req, res, next) {
 
   const apartmentCode = req.params.apartmentCode
 
-  Apartment.findOneAndDelete( {'code' : apartmentCode} ).then(apartment => {
+  Apartment.findByIdAndDelete( apartmentCode ).then(apartment => {
       if (!apartment){
           res.status(404).send({message: "Not found"})
           return;
