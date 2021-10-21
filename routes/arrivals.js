@@ -7,10 +7,10 @@ const moment = require('moment-timezone')
 router.post('', ensureIsAdmin, function(req, res, next) {
 
     const apartmentCode = req.body.apartmentCode
-    const arrivalDate = req.body.arrivalDate
+    const checkInDate = req.body.checkInDate
     const timezone = req.header('Time-Zone')
 
-    findByApartmentCodeAndDate(apartmentCode, arrivalDate, timezone).then((arrivalEntity) => {
+    findByApartmentCodeAndDate(apartmentCode, checkInDate, timezone).then((arrivalEntity) => {
         if (!!arrivalEntity){
             res.status(400).send({ message : "Arrival already exists"})
             return;
@@ -34,7 +34,7 @@ router.get('/apartment/:apartmentCode', function(req, res, next) {
   let limit = req.query.limit
 
   Arrival.paginate( {'apartmentCode' : apartmentCode}, { 
-    sort : { arrivalDate: "desc"}, 
+    sort : { checkInDate: "desc"}, 
     offset: offset,
     limit: limit
   }).then(arrivals => {
@@ -50,20 +50,20 @@ router.get('/apartment/:apartmentCode', function(req, res, next) {
   })
 });
 
-router.get('/date/:arrivalDate', function(req, res, next) {
+router.get('/date/:checkInDate', function(req, res, next) {
 
-    const arrivalDate = req.params.arrivalDate
+    const checkInDate = req.params.checkInDate
     const tz = req.header('Time-Zone')
 
-    const dateRange = getCleaningDateRange(new Date(parseInt(arrivalDate)), tz)
+    const dateRange = getCleaningDateRange(new Date(parseInt(checkInDate)), tz)
 
     let offset = req.query.offset
     let limit = req.query.limit
   
     Arrival.paginate( { 
-        $and: [{'arrivalDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
+        $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
     }, { 
-      sort : { arrivalDate: "asc"}, 
+      sort : { checkInDate: "asc"}, 
       offset: offset,
       limit: limit
     }).then(arrivals => {
@@ -79,16 +79,16 @@ router.get('/date/:arrivalDate', function(req, res, next) {
     })
 });
 
-router.get('/:apartmentCode/:arrivalDate', function(req, res, next) {
+router.get('/:apartmentCode/:checkInDate', function(req, res, next) {
 
-    const arrivalDate = req.params.arrivalDate
+    const checkInDate = req.params.checkInDate
     const apartmentCode = req.params.apartmentCode
     const tz = req.header('Time-Zone')
 
-    const dateRange = getCleaningDateRange(new Date(parseInt(arrivalDate)), tz)
+    const dateRange = getCleaningDateRange(new Date(parseInt(checkInDate)), tz)
 
     Arrival.findOne( { 
-        $and: [{'arrivalDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentCode' : apartmentCode} ]
+        $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentCode' : apartmentCode} ]
     }).then(arrival => {
         if (!!arrival){
             res.status(200).send(arrival)
@@ -102,15 +102,15 @@ router.get('/:apartmentCode/:arrivalDate', function(req, res, next) {
     })
 });
 
-router.put('/:apartmentCode/:arrivalDate', function(req, res, next) {
+router.put('/:apartmentCode/:checkInDate', function(req, res, next) {
 
   const apartmentCode = req.params.apartmentCode
-  const arrivalDate = req.params.arrivalDate
+  const checkInDate = req.params.checkInDate
   const timezone = req.header('Time-Zone')
 
   let newData = req.body
 
-  findByApartmentCodeAndDate(apartmentCode, arrivalDate, timezone).then((arrival) => {
+  findByApartmentCodeAndDate(apartmentCode, checkInDate, timezone).then((arrival) => {
       
     if (!arrival){
           res.status(404).send({message: "Not found"})
@@ -135,15 +135,15 @@ router.put('/:apartmentCode/:arrivalDate', function(req, res, next) {
   })
 });
 
-router.patch('/status/:apartmentCode/:arrivalDate', function(req, res, next) {
+router.patch('/status/:apartmentCode/:checkInDate', function(req, res, next) {
 
     const apartmentCode = req.params.apartmentCode
-    const arrivalDate = req.params.arrivalDate
+    const checkInDate = req.params.checkInDate
     const timezone = req.header('Time-Zone')
 
     let newData = req.body.cleaningStatus
 
-    findByApartmentCodeAndDate(apartmentCode, arrivalDate, timezone).then((arrival) => {
+    findByApartmentCodeAndDate(apartmentCode, checkInDate, timezone).then((arrival) => {
             
         if (!arrival){
                 res.status(404).send({message: "Not found"})
@@ -169,16 +169,16 @@ router.patch('/status/:apartmentCode/:arrivalDate', function(req, res, next) {
         })
 });
 
-router.delete('/:apartmentCode/:arrivalDate', ensureIsAdmin, function(req, res, next) {
+router.delete('/:apartmentCode/:checkInDate', ensureIsAdmin, function(req, res, next) {
 
-    const arrivalDate = req.params.arrivalDate
+    const checkInDate = req.params.checkInDate
     const apartmentCode = req.params.apartmentCode
     const timezone = req.header('Time-Zone')
 
-    const dateRange = getCleaningDateRange(new Date(parseInt(arrivalDate)), timezone)
+    const dateRange = getCleaningDateRange(new Date(parseInt(checkInDate)), timezone)
 
     Arrival.findOneAndDelete({ 
-        $and: [{'arrivalDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentCode' : apartmentCode} ]
+        $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentCode' : apartmentCode} ]
     }).then(arrival => {
             if (!arrival){
                 res.status(404).send({message: "Not found"})
@@ -212,7 +212,7 @@ const findByApartmentCodeAndDate = function(apartmentCode, date, timezone) {
         const dateRange = getCleaningDateRange(new Date(parseInt(date)), timezone)
 
         Arrival.findOne( { 
-            $and: [{'arrivalDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentCode' : apartmentCode} ]
+            $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentCode' : apartmentCode} ]
         }).then(arrival => {
             resolve(arrival)
         }).catch((error) => {

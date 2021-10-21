@@ -40,7 +40,6 @@ router.post('/register', ensureIsAdmin, function(req, res, next) {
     userEntity.save().then((savedUser) => {
         
         res.status(201).send({ 
-            token : authService.createToken(savedUser.username, savedUser.role),
             user: savedUser.username,
             role: savedUser.role
         })
@@ -55,6 +54,13 @@ router.post('/register', ensureIsAdmin, function(req, res, next) {
 router.put('/:username', ensureIsAdmin, function(req, res, next) {
 
     const username = req.params.username
+
+    if (username === "root"){
+        res.status(403).send({
+            message: "Not authorized"
+        })
+        return;
+    }
 
     let newData = req.body
 
@@ -91,6 +97,13 @@ router.put('/:username', ensureIsAdmin, function(req, res, next) {
 router.delete('/:username', ensureIsAdmin, function(req, res, next) {
 
     const username = req.params.username
+
+    if (username === "root"){
+        res.status(403).send({
+            message: "Not authorized"
+        })
+        return;
+    }
 
     User.findOneAndDelete( {'username' : username} ).then(user => {
         if (!user){
