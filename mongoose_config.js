@@ -25,13 +25,13 @@ const StatusChangeSchema = new Schema({
 })
 
 const ArrivalSchema = new Schema({
-    apartmentCode: { type: Number, required: true },
+    apartment: { type: Schema.Types.ObjectId, ref: 'Apartment' },
     expectedKeys: Number,
     returnedKeys: Number,
     checkInDate: { type: Date, required: true },
-    checkInTimeNull: { Boolean, required: true },
+    checkInTimeNull: Boolean,
     checkOutDate: { type: Date, required: true },
-    checkOutTimeNull: { Boolean, required: true },
+    checkOutTimeNull: Boolean,
     cleaningStatus: [StatusChangeSchema],
     timeCleaned: Date,
     message: String,
