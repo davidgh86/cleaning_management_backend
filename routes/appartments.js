@@ -37,6 +37,17 @@ router.get('', function(req, res, next) {
   })
 });
 
+router.get('/all', ensureIsAdmin, function(req, res, next) {
+
+    Apartment.find({}).then((retrievedApartments) => {
+        res.status(200).send(retrievedApartments)
+    }).catch (() => {
+        res.status(400).send({
+            message : "Error retrieving apartments"
+        })
+    })
+});
+
 router.get('/:apartmentCode', function(req, res, next) {
 
   const apartmentCode = req.params.apartmentCode

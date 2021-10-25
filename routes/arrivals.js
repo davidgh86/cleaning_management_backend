@@ -11,7 +11,7 @@ router.post('', ensureIsAdmin, function(req, res, next) {
     const apartmentId = req.body.apartmentId
     const checkInDate = req.body.checkInDate
     const checkOutDate = req.body.checkOutDate
-    const timezone = req.header('Time-Zone')
+    // const timezone = req.header('Time-Zone')
 
     checkBookingBetweenDates(apartmentId, checkInDate, checkOutDate).then((existsBooking) => {
         if (existsBooking){

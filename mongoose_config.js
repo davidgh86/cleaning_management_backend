@@ -36,7 +36,6 @@ const ArrivalSchema = new Schema({
     timeCleaned: Date,
     message: String,
 })
-ArrivalSchema.index({ apartmentCode: 1, arrivalDate: 1 }, { unique: true })
 ArrivalSchema.plugin(mongoosePaginate);
 
 const User = mongoose.model('User', UserSchema)
