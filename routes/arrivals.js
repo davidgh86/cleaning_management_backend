@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
 const ensureIsAdmin = require('./../security_filter').ensureIsAdmin;
-const Arrival = require("../mongoose_config").Arrival
+const Booking = require("../mongoose_config").Booking
 //const objectId = require('mongodb').ObjectID;
 const objectId = require('mongoose').Types.ObjectId;
 const moment = require('moment-timezone')
@@ -18,16 +18,39 @@ router.post('', ensureIsAdmin, function(req, res, next) {
             res.status(400).send({ message : "Booking existing at that moment"})
             return;
         }
-        const newArrival = new Arrival(req.body)
-        newArrival.save().then((savedEntity) => {
+        const newBooking = new Booking(req.body)
+        newBooking.save().then((savedEntity) => {
             res.status(201).send(savedEntity)
         }).catch ((error) => {
             res.status(400).send({
-                message : "Error creating arrival"
+                message : "Error creating booking"
             })
         })
     })    
 });
+
+router.get('', function(req, res, next) {
+
+    let offset = req.query.offset
+    let limit = req.query.limit
+  
+    Booking.paginate( {}, { 
+      sort : { checkInDate: "desc"}, 
+      offset: offset,
+      limit: limit,
+      populate: 'apartment'
+    }).then(bookings => {
+        if (!!bookings){
+            res.status(200).send(bookings)
+        } else {
+            res.status(404).send({message: "Not Found"})
+        }
+    }).catch(() => {
+        res.status(400).send({
+            message : "Error retrieving bookings"
+        })
+    })
+  });
 
 router.get('/apartment/:apartmentId', function(req, res, next) {
 
@@ -35,20 +58,20 @@ router.get('/apartment/:apartmentId', function(req, res, next) {
   let offset = req.query.offset
   let limit = req.query.limit
 
-  Arrival.paginate( {'apartment' : objectId(apartmentId)}, { 
+  Booking.paginate( {'apartment' : objectId(apartmentId)}, { 
     sort : { checkInDate: "desc"}, 
     offset: offset,
     limit: limit,
     populate: 'apartment'
-  }).then(arrivals => {
-      if (!!arrivals){
-          res.status(200).send(arrivals)
+  }).then(bookings => {
+      if (!!bookings){
+          res.status(200).send(bookings)
       } else {
           res.status(404).send({message: "Not Found"})
       }
   }).catch(() => {
       res.status(400).send({
-          message : "Error retrieving arrival"
+          message : "Error retrieving booking"
       })
   })
 });
@@ -63,7 +86,7 @@ router.get('/date/:checkInDate', function(req, res, next) {
     let offset = req.query.offset
     let limit = req.query.limit
   
-    Arrival.paginate( { 
+    Booking.paginate( { 
         $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
     }
     , { 
@@ -72,15 +95,15 @@ router.get('/date/:checkInDate', function(req, res, next) {
       limit: limit,
       populate: "apartment"
     }
-    ).then(arrivals => {
-        if (!!arrivals){
-            res.status(200).send(arrivals)
+    ).then(bookings => {
+        if (!!bookings){
+            res.status(200).send(bookings)
         } else {
             res.status(404).send({message: "Not Found"})
         }
     }).catch(() => {
         res.status(400).send({
-            message : "Error retrieving arrival"
+            message : "Error retrieving booking"
         })
     })
 });
@@ -93,17 +116,17 @@ router.get('/:apartmentId/:checkInDate', function(req, res, next) {
 
     const dateRange = getCleaningDateRange(new Date(parseInt(checkInDate)), tz)
 
-    Arrival.findOne( { 
+    Booking.findOne( { 
         $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentId' : apartmentId} ]
-    }).then(arrival => {
-        if (!!arrival){
-            res.status(200).send(arrival)
+    }).then(booking => {
+        if (!!booking){
+            res.status(200).send(booking)
         } else {
             res.status(404).send({message: "Not Found"})
         }
     }).catch(() => {
         res.status(400).send({
-            message : "Error retrieving arrival"
+            message : "Error retrieving booking"
         })
     })
 });
@@ -116,27 +139,27 @@ router.put('/:apartmentId/:checkInDate', function(req, res, next) {
 
   let newData = req.body
 
-  findByapartmentIdAndDate(apartmentId, checkInDate, checkOutDate).then((arrival) => {
+  findByapartmentIdAndDate(apartmentId, checkInDate, checkOutDate).then((booking) => {
       
-    if (!arrival){
+    if (!booking){
           res.status(404).send({message: "Not found"})
           return;
       }
       
-      arrival.returnedKeys = newData.returnedKeys
-      arrival.timeCleaned = newData.timeCleaned
-      arrival.message = newData.message
+      booking.returnedKeys = newData.returnedKeys
+      booking.timeCleaned = newData.timeCleaned
+      booking.message = newData.message
       
-      arrival.save().then((savedArrival) => {
-          res.status(200).send(savedArrival)
+      booking.save().then((savedBooking) => {
+          res.status(200).send(savedBooking)
       }).catch (() => {
           res.status(400).send({
-              message : "Error modifying arrival"
+              message : "Error modifying booking"
           })
       })
   }).catch(() => {
       res.status(400).send({
-          message : "Error modifiying arrival"
+          message : "Error modifiying booking"
       })
   })
 });
@@ -150,28 +173,28 @@ router.patch('/status/:apartmentId/:checkInDate', function(req, res, next) {
 
     let newData = req.body.cleaningStatus
 
-    findByapartmentIdAndDate(apartmentId, checkInDate, timezone).then((arrival) => {
+    findByapartmentIdAndDate(apartmentId, checkInDate, timezone).then((booking) => {
             
-        if (!arrival){
+        if (!booking){
                 res.status(404).send({message: "Not found"})
                 return;
             }
 
-            arrival.cleaningStatus.push({
+            booking.cleaningStatus.push({
                 cleaningStatus: newData,
                 changeStatusDate: Date.now()
             })
             
-            arrival.save().then((savedArrival) => {
-                res.status(200).send(savedArrival)
+            booking.save().then((savedBooking) => {
+                res.status(200).send(savedBooking)
             }).catch (() => {
                 res.status(400).send({
-                    message : "Error modifying arrival"
+                    message : "Error modifying booking"
                 })
             })
         }).catch(() => {
             res.status(400).send({
-                message : "Error modifiying arrival"
+                message : "Error modifiying booking"
             })
         })
 });
@@ -184,14 +207,14 @@ router.delete('/:apartmentId/:checkInDate', ensureIsAdmin, function(req, res, ne
 
     const dateRange = getCleaningDateRange(new Date(parseInt(checkInDate)), timezone)
 
-    Arrival.findOneAndDelete({ 
+    Booking.findOneAndDelete({ 
         $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentId' : apartmentId} ]
-    }).then(arrival => {
-            if (!arrival){
+    }).then(booking => {
+            if (!booking){
                 res.status(404).send({message: "Not found"})
                 return;
             }
-            res.status(200).send(arrival)
+            res.status(200).send(booking)
         }).catch(() => {
             res.status(400).send({
                 message : "Error retrieving user"
@@ -216,7 +239,7 @@ function getCleaningDateRange(date, timezone){
 const checkBookingBetweenDates = function(apartmentId, startDate, endDate) {
     // TODO check if add offset
     return new Promise(function(resolve, reject) {
-        Arrival.exists({
+        Booking.exists({
             $or: [
                 { $and: [{'checkInDate' : {$gte: startDate, $lte: endDate }} , {'apartmentId' : apartmentId}] },
                 { $and: [{'checkOutDate' : {$gte: startDate, $lte: endDate }} , {'apartmentId' : apartmentId}] }
@@ -232,10 +255,10 @@ const findByapartmentIdAndDate = function(apartmentId, date, timezone) {
         
         const dateRange = getCleaningDateRange(new Date(parseInt(date)), timezone)
 
-        Arrival.findOne( { 
+        Booking.findOne( { 
             $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }} , {'apartmentId' : apartmentId} ]
-        }).then(arrival => {
-            resolve(arrival)
+        }).then(booking => {
+            resolve(booking)
         }).catch((error) => {
             reject(error)
         })

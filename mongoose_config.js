@@ -24,25 +24,25 @@ const StatusChangeSchema = new Schema({
     changeStatusDate: { type: Date, required: true },
 })
 
-const ArrivalSchema = new Schema({
+const BookingSchema = new Schema({
     apartment: { type: Schema.Types.ObjectId, ref: 'Apartment' },
     expectedKeys: Number,
     returnedKeys: Number,
     checkInDate: { type: Date, required: true },
-    checkInTimeNull: Boolean,
+    specifiedCheckInTime: Boolean,
     checkOutDate: { type: Date, required: true },
-    checkOutTimeNull: Boolean,
+    specifiedCheckOutTime: Boolean,
     cleaningStatus: [StatusChangeSchema],
     timeCleaned: Date,
     message: String,
 })
-ArrivalSchema.plugin(mongoosePaginate);
+BookingSchema.plugin(mongoosePaginate);
 
 const User = mongoose.model('User', UserSchema)
 const Apartment = mongoose.model('Apartment', ApartmentSchema)
 const StatusChange = mongoose.model('StatusChange', StatusChangeSchema)
-const Arrival = mongoose.model('Arrival', ArrivalSchema)
+const Booking = mongoose.model('Booking', BookingSchema)
 
-const models = { User, Apartment, StatusChange, Arrival }
+const models = { User, Apartment, StatusChange, Booking }
 
 module.exports = models;
