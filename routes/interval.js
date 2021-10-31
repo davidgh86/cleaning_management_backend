@@ -37,8 +37,12 @@ router.post('/upload', upload.single('file'), function(req, res, next) {
     let date = getStartOfDateFromEpoch(parseInt(req.body.date), timezone)
 
     updateValuesInMemory(date, timezone)
-        .then(bookings => res.status(200).send(bookings))
-        .catch(err => res.status(400).send(err))
+        .then(bookings => 
+            res.status(200).send(bookings)
+        )
+        .catch(err => 
+            res.status(400).send(err)
+        )
 });
 
 
@@ -76,8 +80,10 @@ function updateValuesInMemory(date, timezone) {
                     reject(err)
                     return
                 }
+                let count = 0
                 records.forEach((item) => {
                     findApartmentAndInsertIfNotExisting(item).then(persistedApartment => {
+                        
                         let apartment = objectId(persistedApartment._id)
                         let expectedKeys = parseKeys(item.Time)
                         let checkInTime = parseTime(item.Time)
@@ -90,14 +96,21 @@ function updateValuesInMemory(date, timezone) {
                         saveOrUpdateBooking({
                             apartment, expectedKeys, checkOutDate, specifiedCheckInTime, checkInDate, checkInTime, bookingCode
                         }, true).then(savedOrUpdated => {
+                            count = count + 1;
                             arrivals.push(savedOrUpdated)
-                            if (arrivals.length === records.length){
+                            if (count === records.length){
                                 arrivalsComplete = true
                             }
                             if (arrivalsComplete && departureComplete){
                                 resolve({arrivals, departures})
                             }
-                        }).catch(error => reject(error))
+                        }).catch(error => {
+                            count = count + 1;
+                            console.error(error)
+                        })
+                    }).catch(error => {
+                        count = count + 1;
+                        console.error(error)
                     })
                 })
             })
@@ -111,8 +124,10 @@ function updateValuesInMemory(date, timezone) {
                     reject(err)
                     return
                 }
+                let count = 0;
                 records.forEach((item) => {
                     findApartmentAndInsertIfNotExisting(item).then(persistedApartment => {
+                        
                         let apartment = objectId(persistedApartment._id)
                         let expectedKeys = parseKeys(item.Time)
                         let checkOutTime = parseTime(item.Time)
@@ -125,14 +140,21 @@ function updateValuesInMemory(date, timezone) {
                         saveOrUpdateBooking({
                             apartment, expectedKeys, checkInDate, specifiedCheckOutTime, checkOutDate, checkOutTime, bookingCode
                         }, false).then(savedOrUpdated => {
+                            count = count + 1;
                             departures.push(savedOrUpdated)
-                            if (departures.length === records.length){
+                            if (count === records.length){
                                 departureComplete = true
                             }
                             if (arrivalsComplete && departureComplete){
                                 resolve({arrivals, departures})
                             }
-                        }).catch(error => reject(error))
+                        }).catch(error => {
+                            count = count + 1;
+                            console.error(error)
+                        })
+                    }).catch(error => {
+                        count = count + 1;
+                        console.error(error)
                     })
                 })
             })
@@ -155,7 +177,11 @@ function findApartmentAndInsertIfNotExisting(csvItem) {
                 newApartment.save().then((saved) => {
                     resolve(saved)
                 }).catch((err) => {
-                    reject(err)
+                    Apartment.findOne({"apartmentCode": apartmentCode}).then((retry) => {
+                        resolve(retry)
+                    }).catch((err) => {
+                        reject(err)
+                    })
                 })
             } else {
                 resolve(apartment)
@@ -166,7 +192,7 @@ function findApartmentAndInsertIfNotExisting(csvItem) {
 
 function saveOrUpdateBooking(booking, isArrival) {
     return new Promise((resolve, reject) => {
-        Booking.findOne({"bookingCode": booking.bookingCode}).then(persistedBooking => {
+        Booking.findOne({"bookingCode": booking.bookingCode, "apartment": booking.apartment}).then(persistedBooking => {
             if (!persistedBooking) {
                 const newBooking = new Booking(booking)
                 newBooking.save()

@@ -26,7 +26,7 @@ const StatusChangeSchema = new Schema({
 })
 
 const BookingSchema = new Schema({
-    bookingCode: { type: String, required: true, unique: true },
+    bookingCode: { type: String, required: true },
     apartment: { type: Schema.Types.ObjectId, ref: 'Apartment' },
     expectedKeys: Number,
     returnedKeys: Number,
@@ -38,6 +38,8 @@ const BookingSchema = new Schema({
     timeCleaned: Date,
     message: String,
 })
+BookingSchema.index({ apartment: 1, bookingCode: 1 }, { unique: true })
+
 BookingSchema.plugin(mongoosePaginate);
 
 const User = mongoose.model('User', UserSchema)
