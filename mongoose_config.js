@@ -14,6 +14,7 @@ const UserSchema = new Schema({
 UserSchema.plugin(mongoosePaginate);
 
 const ApartmentSchema = new Schema({
+    apartmentCode: { type: Number, required: true, unique: true },
     apartmentName: { type: String, required: true, unique: true },
     keys: Number
 })
@@ -25,6 +26,7 @@ const StatusChangeSchema = new Schema({
 })
 
 const BookingSchema = new Schema({
+    bookingCode: { type: String, required: true, unique: true },
     apartment: { type: Schema.Types.ObjectId, ref: 'Apartment' },
     expectedKeys: Number,
     returnedKeys: Number,
