@@ -8,9 +8,12 @@ const parse = require('csv-parse');
 
 const {Booking, Apartment} = require("../mongoose_config");
 const objectId = require('mongoose').Types.ObjectId;
-const {parseKeys, parseTime, getArrivalDateFromLocaleString, getDepartureDateFromLocaleString } = require('../utils/utils')
+const { parseKeys, parseTime, getArrivalDateFromLocaleString, getDepartureDateFromLocaleString } = require('../utils/utils')
+const { getStartOfDateFromEpoch, getCleaningDateRangeNoOffset } = require('../utils/timeUtils')
 
 const saveRootPath = './uploaded_files'
+
+let currentIntervals= []
 
 // TODO check if file exists
 const storage = multer.diskStorage({
@@ -38,20 +41,176 @@ router.post('/upload', upload.single('file'), function(req, res, next) {
 
     updateValuesInMemory(date, timezone)
         .then(bookings => 
-            res.status(200).send(bookings)
+            calculateIntervalByDate(date, timezone)
+                .then(intervals => res.status(200).send({bookings, intervals}))
+                .catch(err => res.status(400).send(err))
         )
         .catch(err => 
             res.status(400).send(err)
         )
 });
 
+function calculateIntervalByDate(date, timezone) {
 
-function getStartOfDateFromEpoch(epoch, timezone) {
-    let tz = timezone
-    let date = epoch
-    date = new Date(date)
-    date = new Date(moment(date).tz(tz).startOf('day').utc())
-    return date
+    const dateRange = getCleaningDateRangeNoOffset(new Date(parseInt(date)), timezone)
+    return new Promise((resolve, reject) => {
+        Booking.find({ 
+            $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
+        }).populate('apartment').then(arrivals => {
+            Booking.find({ 
+                $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
+            }).populate('apartment').then(departures => {
+                calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures).then(response => {
+                    resolve(response)
+                })
+            }).catch(err => reject(err))
+        }).catch(err => reject(err))
+    })
+}
+
+router.get('/interval/:date', function(req, res, next){
+    let timezone = req.header('Time-Zone')
+    let date = req.params.date
+
+    const dateRange = getCleaningDateRangeNoOffset(new Date(parseInt(date)), timezone)
+
+    Booking.find({ 
+        $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
+    }).populate('apartment').then(arrivals => {
+        Booking.find({ 
+            $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
+        }).populate('apartment').then(departures => {
+            calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures).then(response => {
+                res.status(200).send(response)
+            })
+        }).catch(err => res.status(400).send(err))
+    }).catch(err => res.status(400).send(err))
+});
+
+function calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures){
+
+    return new Promise((resolve, reject) => {
+        calculateIntervals(arrivals, departures).then(({departuresToUpdate, apartmentUpdateStatus, intervals}) => {
+            currentIntervals = intervals
+            departuresToUpdate.forEach(departure => {
+                await departure.save();
+            })
+            for (var key in apartmentUpdateStatus) {
+                await Apartment.findOneAndUpdate({"apartmentCode" : key}, { lastCleaningStatus : apartmentUpdateStatus[key]})
+            }
+            resolve(intervals)
+        })
+    })
+}
+
+function calculateIntervals(arrivals, departures) {
+    return new Promise(function (resolve, reject) {
+    
+        const departuresToUpdate = []
+        const apartmentUpdateStatus = {}
+        const intervals = []
+
+        arrivalApartmentCodes = new Set(arrivals.map(arrival => arrival.apartment.apartmentCode))
+        
+        //Apartment.find({"apartmentCode": { $in : arrivalApartmentCodes }}).then((apartments) => apartments)
+
+        departureApartmentCodesToBeOccupiedToday = new Set(departures.filter(departure => arrivalApartmentCodes.has(departure.apartment.apartmentCode)).map(departure => departure.apartment.apartmentCode));
+
+        let processedDepartures = false
+        let processedArrivals = 0
+        arrivals.forEach(arrival=> {
+            if (departureApartmentCodesToBeOccupiedToday.has(arrival.apartment.apartmentCode)){
+                // arrivals when departure same day
+                departures.forEach(departure => {
+                    if (departure.apartment.apartmentCode === arrival.apartment.apartmentCode) {
+                        updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "ARRIVAL");
+                    }
+                })
+                processedArrivals = processedArrivals + 1
+                if (processedArrivals === arrivals.length && processedDepartures){
+                    resolve({departuresToUpdate, apartmentUpdateStatus, intervals})
+                    return
+                }
+            } else {
+                Apartment.findOne({"apartmentCode": arrival.apartment.apartmentCode}).then((apartment) => {
+                    let cleaningStatus = null
+                    if (apartment && apartment.lastCleaningStatus) {
+                        cleaningStatus = apartment.lastCleaningStatus.cleaningStatus
+                    }
+                    intervals.push({
+                        cleaningStatus: cleaningStatus,
+                        limitTime: arrival.checkInDate,
+                        apartmentName: arrival.apartment.apartmentName,
+                        apartmentCode: arrival.apartment.apartmentCode,
+                        expectedKeys: arrival.apartment.expectedKeys,
+                        priorityType: "ARRIVAL"
+                    })
+                })
+                .catch(err => console.error(err))
+                .finally(() => {
+                    processedArrivals = processedArrivals + 1
+                    if (processedArrivals === arrivals.length && processedDepartures){
+                        resolve({departuresToUpdate, apartmentUpdateStatus, intervals})
+                        return
+                    }
+                })
+            }
+        })
+
+        departureApartmentCodesToBeOccupiedAnotherDay = new Set(departures.filter(departure => !arrivalApartmentCodes.has(departure.apartment.apartmentCode)))
+        departureApartmentCodesToBeOccupiedAnotherDay.forEach(departure => {
+            updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "DEPARTURE");
+        })
+        processedDepartures = true
+        if (processedArrivals === arrivals.length){
+            resolve({departuresToUpdate, apartmentUpdateStatus, intervals})
+            return
+        }
+    });
+
+}
+
+function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, priorityType) {
+    let { currentStatus, newStatus, currentDate } = getStatusTransition(departure);
+    if (currentStatus !== newStatus) {
+        changeStatus = {
+            cleaningStatus: newStatus,
+            changeStatusDate: currentDate
+        };
+        departure.cleaningStatusChangeLog.push(changeStatus);
+        departuresToUpdate.push(departure);
+        apartmentUpdateStatus[departure.departure.apartmentCode] = changeStatus;
+    }
+
+    intervals.push({
+        cleaningStatus: (newStatus) ? newStatus : currentStatus,
+        limitTime: departure.checkInDate,
+        apartmentName: departure.apartment.apartmentName,
+        apartmentCode: departure.apartment.apartmentCode,
+        expectedKeys: departure.apartment.expectedKeys,
+        priorityType: priorityType
+    });
+}
+
+function getStatusTransition(departure) {
+    let currentStatus = null;
+    if (departure.cleaningStatusChangeLog && departure.cleaningStatusChangeLog.length > 0) {
+        currentStatus = departure.cleaningStatusChangeLog[departure.cleaningStatusChangeLog.length - 1];
+    }
+    let newStatus = null;
+    let currentDate = Date.now();
+    if (!currentStatus) {
+        if (departure.checkOutDate > currentDate) {
+            newStatus = 'OCCUPIED';
+        } else {
+            newStatus = 'READY_TO_CLEAN';
+        }
+    } else if (currentStatus === 'OCCUPIED') {
+        if (departure.checkOutDate <= currentDate) {
+            newStatus = 'READY_TO_CLEAN';
+        }
+    }
+    return { currentStatus, newStatus, currentDate };
 }
 
 function updateValuesInMemory(date, timezone) {
@@ -103,6 +262,7 @@ function updateValuesInMemory(date, timezone) {
                             }
                             if (arrivalsComplete && departureComplete){
                                 resolve({arrivals, departures})
+                                return
                             }
                         }).catch(error => {
                             count = count + 1;
@@ -147,6 +307,7 @@ function updateValuesInMemory(date, timezone) {
                             }
                             if (arrivalsComplete && departureComplete){
                                 resolve({arrivals, departures})
+                                return
                             }
                         }).catch(error => {
                             count = count + 1;
@@ -220,13 +381,8 @@ function saveOrUpdateBooking(booking, isArrival) {
                     .then((savedBooking) => resolve(savedBooking))
                     .catch((error) => reject(error))
             }
-
         })
     })
 }
-
-
-
-
 
 module.exports = router;
