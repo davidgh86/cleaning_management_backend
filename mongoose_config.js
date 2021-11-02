@@ -13,18 +13,19 @@ const UserSchema = new Schema({
 });
 UserSchema.plugin(mongoosePaginate);
 
-const ApartmentSchema = new Schema({
-    apartmentCode: { type: Number, required: true, unique: true },
-    apartmentName: { type: String, required: true, unique: true },
-    keys: Number,
-    lastCleaningStatus: StatusChangeSchema
-})
-ApartmentSchema.plugin(mongoosePaginate);
-
 const StatusChangeSchema = new Schema({
     cleaningStatus: { type: String, required: true, enum: ['OCCUPIED', 'READY_TO_CLEAN', 'ON_CLEANING', 'CLEAN'] },
     changeStatusDate: { type: Date, required: true },
 })
+
+const ApartmentSchema = new Schema({
+    apartmentCode: { type: Number, required: true, unique: true },
+    apartmentName: { type: String, required: true, unique: true },
+    keys: Number,
+    lastCleaningStatus: StatusChangeSchema,
+    lastBookingCode: String
+})
+ApartmentSchema.plugin(mongoosePaginate);
 
 const BookingSchema = new Schema({
     bookingCode: { type: String, required: true },

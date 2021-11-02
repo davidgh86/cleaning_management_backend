@@ -1,10 +1,11 @@
 var express = require('express');
 var router = express.Router();
 const multer  = require('multer')
-const moment = require('moment-timezone')
 const fs = require('fs')
 //const ensureIsAdmin = require('./../security_filter').ensureIsAdmin;
 const parse = require('csv-parse');
+
+const schedule = require('node-schedule');
 
 const {Booking, Apartment} = require("../mongoose_config");
 const objectId = require('mongoose').Types.ObjectId;
@@ -13,7 +14,8 @@ const { getStartOfDateFromEpoch, getCleaningDateRangeNoOffset } = require('../ut
 
 const saveRootPath = './uploaded_files'
 
-let currentIntervals= []
+let currentIntervals = []
+let changeToReadyToCleanTask = {}
 
 // TODO check if file exists
 const storage = multer.diskStorage({
@@ -48,11 +50,14 @@ router.post('/upload', upload.single('file'), function(req, res, next) {
         .catch(err => 
             res.status(400).send(err)
         )
+
+    // TODO add not cleaned apartments from previous days
+
 });
 
 function calculateIntervalByDate(date, timezone) {
 
-    const dateRange = getCleaningDateRangeNoOffset(new Date(parseInt(date)), timezone)
+    const dateRange = getCleaningDateRangeNoOffset(date, timezone)
     return new Promise((resolve, reject) => {
         Booking.find({ 
             $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
@@ -68,31 +73,56 @@ function calculateIntervalByDate(date, timezone) {
     })
 }
 
-router.get('/interval/:date', function(req, res, next){
-    let timezone = req.header('Time-Zone')
-    let date = req.params.date
+function scheduleReadyToCleanChangeStatus(interval) {
+    if (interval && interval.cleaningStatus && interval.occupiedUntil && interval.cleaningStatus === "OCCUPIED") {
 
-    const dateRange = getCleaningDateRangeNoOffset(new Date(parseInt(date)), timezone)
+        changeToReadyToCleanTask[interval.apartmentCode] = schedule.scheduleJob(date, function(){
+            changeCleaningStatus(interval.apartmentCode, interval.bookingCode, "READY_TO_CLEAN")
+            delete changeToReadyToCleanTask[interval.apartmentCode]
+        });
+    }
+}
 
-    Booking.find({ 
-        $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
-    }).populate('apartment').then(arrivals => {
-        Booking.find({ 
-            $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
-        }).populate('apartment').then(departures => {
-            calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures).then(response => {
-                res.status(200).send(response)
-            })
-        }).catch(err => res.status(400).send(err))
-    }).catch(err => res.status(400).send(err))
-});
+async function changeCleaningStatus(apartmentCode, bookingCode, newStatus) {
+    for (let i = 0; i<currentIntervals; i++){
+        if (currentIntervals[i].apartmentCode === apartmentCode) {
+            currentIntervals[i].cleaningStatus = newStatus
+            break;
+        }
+    }
+    let updateInfo
+    let dateNow = Date.now()
+    let lastCleaningStatus = {
+        cleaningStatus: newStatus,
+        changeStatusDate: dateNow,
+    }
+    if (newStatus === "READY_TO_CLEAN" && !!bookingCode){
+        updateInfo = {
+            lastCleaningStatus,
+            lastBookingCode = bookingCode
+        }
+    } else {
+        updateInfo = {
+            lastCleaningStatus
+        }
+    }
+    await Apartment.findOneAndUpdate({"apartmentCode" : apartmentCode}, updateInfo)
+    
+    if (bookingCode) {
+        booking = await Booking.findOne({"bookingCode": bookingCode})
+        booking.cleaningStatusChangeLog.push(lastCleaningStatus)
+        await booking.save()
+    }
+    // TODO emit ws event to updat front
+    
+}
 
 function calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures){
 
     return new Promise((resolve, reject) => {
-        calculateIntervals(arrivals, departures).then(({departuresToUpdate, apartmentUpdateStatus, intervals}) => {
+        calculateIntervals(arrivals, departures).then(async ({departuresToUpdate, apartmentUpdateStatus, intervals}) => {
             currentIntervals = intervals
-            departuresToUpdate.forEach(departure => {
+            departuresToUpdate.forEach(async departure => {
                 await departure.save();
             })
             for (var key in apartmentUpdateStatus) {
@@ -123,7 +153,7 @@ function calculateIntervals(arrivals, departures) {
                 // arrivals when departure same day
                 departures.forEach(departure => {
                     if (departure.apartment.apartmentCode === arrival.apartment.apartmentCode) {
-                        updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "ARRIVAL");
+                        updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "ARRIVAL", arrival.checkInDate);
                     }
                 })
                 processedArrivals = processedArrivals + 1
@@ -140,9 +170,12 @@ function calculateIntervals(arrivals, departures) {
                     intervals.push({
                         cleaningStatus: cleaningStatus,
                         limitTime: arrival.checkInDate,
+                        occupiedUntil: null,
                         apartmentName: arrival.apartment.apartmentName,
                         apartmentCode: arrival.apartment.apartmentCode,
                         expectedKeys: arrival.apartment.expectedKeys,
+                        // TODO add info of lastBookingCode to apartments
+                        bookingCode: null,
                         priorityType: "ARRIVAL"
                     })
                 })
@@ -159,7 +192,7 @@ function calculateIntervals(arrivals, departures) {
 
         departureApartmentCodesToBeOccupiedAnotherDay = new Set(departures.filter(departure => !arrivalApartmentCodes.has(departure.apartment.apartmentCode)))
         departureApartmentCodesToBeOccupiedAnotherDay.forEach(departure => {
-            updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "DEPARTURE");
+            updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "DEPARTURE", null);
         })
         processedDepartures = true
         if (processedArrivals === arrivals.length){
@@ -170,7 +203,7 @@ function calculateIntervals(arrivals, departures) {
 
 }
 
-function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, priorityType) {
+function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, priorityType, limitTime) {
     let { currentStatus, newStatus, currentDate } = getStatusTransition(departure);
     if (currentStatus !== newStatus) {
         changeStatus = {
@@ -179,15 +212,17 @@ function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateSta
         };
         departure.cleaningStatusChangeLog.push(changeStatus);
         departuresToUpdate.push(departure);
-        apartmentUpdateStatus[departure.departure.apartmentCode] = changeStatus;
+        apartmentUpdateStatus[departure.apartment.apartmentCode] = changeStatus;
     }
 
     intervals.push({
         cleaningStatus: (newStatus) ? newStatus : currentStatus,
-        limitTime: departure.checkInDate,
+        limitTime: limitTime,
+        occupiedUntil: departure.checkOutDate,
         apartmentName: departure.apartment.apartmentName,
         apartmentCode: departure.apartment.apartmentCode,
         expectedKeys: departure.apartment.expectedKeys,
+        bookingCode: departure.bookingCode,
         priorityType: priorityType
     });
 }
