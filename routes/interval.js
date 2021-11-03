@@ -66,6 +66,9 @@ function calculateIntervalByDate(date, timezone) {
                 $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
             }).populate('apartment').then(departures => {
                 calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures).then(response => {
+                    response.forEach(interval => {
+                        scheduleReadyToCleanChangeStatus(interval)
+                    })
                     resolve(response)
                 })
             }).catch(err => reject(err))
@@ -99,7 +102,7 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus) {
     if (newStatus === "READY_TO_CLEAN" && !!bookingCode){
         updateInfo = {
             lastCleaningStatus,
-            lastBookingCode = bookingCode
+            lastBookingCode: bookingCode
         }
     } else {
         updateInfo = {
@@ -126,7 +129,9 @@ function calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, depa
                 await departure.save();
             })
             for (var key in apartmentUpdateStatus) {
-                await Apartment.findOneAndUpdate({"apartmentCode" : key}, { lastCleaningStatus : apartmentUpdateStatus[key]})
+                if (apartmentUpdateStatus[key].cleaningStatus){
+                    await Apartment.findOneAndUpdate({"apartmentCode" : key}, { lastCleaningStatus : apartmentUpdateStatus[key]})
+                }
             }
             resolve(intervals)
         })
