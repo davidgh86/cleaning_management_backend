@@ -11,6 +11,7 @@ const {Booking, Apartment} = require("../mongoose_config");
 const objectId = require('mongoose').Types.ObjectId;
 const { parseKeys, parseTime, getArrivalDateFromLocaleString, getDepartureDateFromLocaleString } = require('../utils/utils')
 const { getStartOfDateFromEpoch, getCleaningDateRangeNoOffset } = require('../utils/timeUtils')
+const wsServer = require('../ws_server');
 
 const saveRootPath = './uploaded_files'
 
@@ -52,6 +53,19 @@ router.post('/upload', upload.single('file'), function(req, res, next) {
         )
 
     // TODO add not cleaned apartments from previous days
+
+});
+
+router.put('/', function(req, res, next) {
+    
+    let timezone = req.header('Time-Zone')
+    let intervalToUpdate = req.body
+    
+    changeCleaningStatus(intervalToUpdate.apartmentCode, intervalToUpdate.bookingCode, intervalToUpdate.cleaningStatus.cleaningStatus);
+    if (changeToReadyToCleanTask[intervalToUpdate.apartmentCode]){
+        changeToReadyToCleanTask[intervalToUpdate.apartmentCode].cancel()
+        delete changeToReadyToCleanTask[intervalToUpdate.apartmentCode]
+    }
 
 });
 
@@ -116,8 +130,10 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus) {
         booking.cleaningStatusChangeLog.push(lastCleaningStatus)
         await booking.save()
     }
-    // TODO emit ws event to updat front
-    
+    let interval = currentIntervals.filter(int => int.apartmentCode === bookingCode)
+    if (interval.length === 1) {
+        wsServer.send(interval[0])
+    }
 }
 
 function calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures){
