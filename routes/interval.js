@@ -56,16 +56,33 @@ router.post('/upload', upload.single('file'), function(req, res, next) {
 
 });
 
-router.put('/', function(req, res, next) {
+router.put('', function(req, res, next) {
     
     let timezone = req.header('Time-Zone')
     let intervalToUpdate = req.body
     
-    changeCleaningStatus(intervalToUpdate.apartmentCode, intervalToUpdate.bookingCode, intervalToUpdate.cleaningStatus.cleaningStatus);
+    const changed = changeCleaningStatus(intervalToUpdate.apartmentCode, intervalToUpdate.bookingCode, intervalToUpdate.cleaningStatus.cleaningStatus, intervalToUpdate.returnedKeys);
     if (changeToReadyToCleanTask[intervalToUpdate.apartmentCode]){
         changeToReadyToCleanTask[intervalToUpdate.apartmentCode].cancel()
         delete changeToReadyToCleanTask[intervalToUpdate.apartmentCode]
     }
+
+    if (changed){
+        res.status(200).send(changed)
+        return;
+    }
+    
+    res.status(404).send("Not found");
+
+});
+
+router.get('', function(req, res, next) {
+    
+    let timezone = req.header('Time-Zone')
+    let intervalToUpdate = req.body
+    
+    // TODO use interval
+    res.status(200).send(currentIntervals)
 
 });
 
@@ -100,7 +117,7 @@ function scheduleReadyToCleanChangeStatus(interval) {
     }
 }
 
-async function changeCleaningStatus(apartmentCode, bookingCode, newStatus) {
+async function changeCleaningStatus(apartmentCode, bookingCode, newStatus, returnedKeys) {
     for (let i = 0; i<currentIntervals; i++){
         if (currentIntervals[i].apartmentCode === apartmentCode) {
             currentIntervals[i].cleaningStatus = newStatus
@@ -128,12 +145,15 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus) {
     if (bookingCode) {
         booking = await Booking.findOne({"bookingCode": bookingCode})
         booking.cleaningStatusChangeLog.push(lastCleaningStatus)
+        booking.returnedKeys = returnedKeys
         await booking.save()
     }
     let interval = currentIntervals.filter(int => int.apartmentCode === bookingCode)
     if (interval.length === 1) {
         wsServer.send(interval[0])
+        return (interval[0])
     }
+    return null
 }
 
 function calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures){
