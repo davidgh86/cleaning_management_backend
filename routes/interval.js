@@ -82,6 +82,7 @@ router.get('', function(req, res, next) {
     let intervalToUpdate = req.body
     
     // TODO use interval
+    //wsServer.send("message")
     res.status(200).send(currentIntervals)
 
 });
@@ -92,19 +93,23 @@ function calculateIntervalByDate(date, timezone) {
     return new Promise((resolve, reject) => {
         Booking.find({ 
             $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
-        }).populate('apartment').then(arrivals => {
-            Booking.find({ 
-                $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
-            }).populate('apartment').then(departures => {
-                calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures).then(response => {
-                    response.forEach(interval => {
-                        scheduleReadyToCleanChangeStatus(interval)
-                    })
-                    resolve(response)
-                })
+        }).populate('apartment')
+            .then(arrivals => {
+                Booking.find({ 
+                    $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]
+                }).populate('apartment')
+                    .then(departures => {
+                        calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures)
+                            .then(response => {
+                                response.forEach(interval => {
+                                    scheduleReadyToCleanChangeStatus(interval)
+                                })
+                                resolve(response)
+                            })
+                            .catch(error => reject(error))
+                    }).catch(err => reject(err))
             }).catch(err => reject(err))
-        }).catch(err => reject(err))
-    })
+        })
 }
 
 function scheduleReadyToCleanChangeStatus(interval) {
@@ -140,17 +145,30 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus, retur
             lastCleaningStatus
         }
     }
-    await Apartment.findOneAndUpdate({"apartmentCode" : apartmentCode}, updateInfo)
+
+    try {
+        await Apartment.findOneAndUpdate({"apartmentCode" : apartmentCode}, updateInfo)
+    } catch (error) {
+        console.log(error)
+    }
     
     if (bookingCode) {
-        booking = await Booking.findOne({"bookingCode": bookingCode})
-        booking.cleaningStatusChangeLog.push(lastCleaningStatus)
-        booking.returnedKeys = returnedKeys
-        await booking.save()
+        try {
+            booking = await Booking.findOne({"bookingCode": bookingCode})
+            booking.cleaningStatusChangeLog.push(lastCleaningStatus)
+            booking.returnedKeys = returnedKeys
+            try {
+                booking = await booking.save()
+            } catch (error) {
+                console.log(error)
+            }
+        } catch (error) {
+            console.log(error)
+        }
     }
-    let interval = currentIntervals.filter(int => int.apartmentCode === bookingCode)
+    let interval = currentIntervals.filter(int => int.apartmentCode === apartmentCode)
     if (interval.length === 1) {
-        wsServer.send(interval[0])
+        wsServer.send(JSON.stringify(interval[0]))
         return (interval[0])
     }
     return null
@@ -159,18 +177,27 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus, retur
 function calculateIntervalsAndPersistApartmentStatusAndDepartures(arrivals, departures){
 
     return new Promise((resolve, reject) => {
-        calculateIntervals(arrivals, departures).then(async ({departuresToUpdate, apartmentUpdateStatus, intervals}) => {
+        calculateIntervals(arrivals, departures)
+        .then(async ({departuresToUpdate, apartmentUpdateStatus, intervals}) => {
             currentIntervals = intervals
             departuresToUpdate.forEach(async departure => {
-                await departure.save();
+                try {
+                    await departure.save();
+                } catch (error) {
+                    reject(error)
+                }
             })
             for (var key in apartmentUpdateStatus) {
                 if (apartmentUpdateStatus[key].cleaningStatus){
-                    await Apartment.findOneAndUpdate({"apartmentCode" : key}, { lastCleaningStatus : apartmentUpdateStatus[key]})
+                    try {
+                        await Apartment.findOneAndUpdate({"apartmentCode" : key}, { lastCleaningStatus : apartmentUpdateStatus[key]})
+                    } catch (error) {
+                        reject(error)
+                    }
                 }
             }
             resolve(intervals)
-        })
+        }).catch(error => reject(error))
     })
 }
 
@@ -182,8 +209,6 @@ function calculateIntervals(arrivals, departures) {
         const intervals = []
 
         arrivalApartmentCodes = new Set(arrivals.map(arrival => arrival.apartment.apartmentCode))
-        
-        //Apartment.find({"apartmentCode": { $in : arrivalApartmentCodes }}).then((apartments) => apartments)
 
         departureApartmentCodesToBeOccupiedToday = new Set(departures.filter(departure => arrivalApartmentCodes.has(departure.apartment.apartmentCode)).map(departure => departure.apartment.apartmentCode));
 
@@ -203,31 +228,34 @@ function calculateIntervals(arrivals, departures) {
                     return
                 }
             } else {
-                Apartment.findOne({"apartmentCode": arrival.apartment.apartmentCode}).then((apartment) => {
-                    let cleaningStatus = null
-                    if (apartment && apartment.lastCleaningStatus) {
-                        cleaningStatus = apartment.lastCleaningStatus.cleaningStatus
-                    }
-                    intervals.push({
-                        cleaningStatus: cleaningStatus,
-                        limitTime: arrival.checkInDate,
-                        occupiedUntil: null,
-                        apartmentName: arrival.apartment.apartmentName,
-                        apartmentCode: arrival.apartment.apartmentCode,
-                        expectedKeys: arrival.apartment.expectedKeys,
-                        // TODO add info of lastBookingCode to apartments
-                        bookingCode: null,
-                        priorityType: "ARRIVAL"
+                Apartment.findOne({"apartmentCode": arrival.apartment.apartmentCode})
+                    .then((apartment) => {
+                        let cleaningStatus = []
+                        if (apartment && apartment.lastCleaningStatus) {
+                            cleaningStatus = apartment.lastCleaningStatus.cleaningStatus
+                        }
+                        intervals.push({
+                            cleaningStatus: cleaningStatus,
+                            limitTime: arrival.checkInDate,
+                            occupiedUntil: null,
+                            apartmentName: arrival.apartment.apartmentName,
+                            apartmentCode: arrival.apartment.apartmentCode,
+                            expectedKeys: arrival.apartment.expectedKeys,
+                            // TODO add info of lastBookingCode to apartments
+                            bookingCode: null,
+                            priorityType: "ARRIVAL"
+                        })
                     })
-                })
-                .catch(err => console.error(err))
-                .finally(() => {
-                    processedArrivals = processedArrivals + 1
-                    if (processedArrivals === arrivals.length && processedDepartures){
-                        resolve({departuresToUpdate, apartmentUpdateStatus, intervals})
-                        return
-                    }
-                })
+                    .catch(err => {
+                        reject(err);
+                    })
+                    .finally(() => {
+                        processedArrivals = processedArrivals + 1
+                        if (processedArrivals === arrivals.length && processedDepartures){
+                            resolve({departuresToUpdate, apartmentUpdateStatus, intervals})
+                            return
+                        }
+                    })
             }
         })
 
@@ -317,7 +345,8 @@ function updateValuesInMemory(date, timezone) {
                 }
                 let count = 0
                 records.forEach((item) => {
-                    findApartmentAndInsertIfNotExisting(item).then(persistedApartment => {
+                    findApartmentAndInsertIfNotExisting(item)
+                    .then(persistedApartment => {
                         
                         let apartment = objectId(persistedApartment._id)
                         let expectedKeys = parseKeys(item.Time)
@@ -330,7 +359,8 @@ function updateValuesInMemory(date, timezone) {
 
                         saveOrUpdateBooking({
                             apartment, expectedKeys, checkOutDate, specifiedCheckInTime, checkInDate, checkInTime, bookingCode
-                        }, true).then(savedOrUpdated => {
+                        }, true)
+                        .then(savedOrUpdated => {
                             count = count + 1;
                             arrivals.push(savedOrUpdated)
                             if (count === records.length){
@@ -362,7 +392,8 @@ function updateValuesInMemory(date, timezone) {
                 }
                 let count = 0;
                 records.forEach((item) => {
-                    findApartmentAndInsertIfNotExisting(item).then(persistedApartment => {
+                    findApartmentAndInsertIfNotExisting(item)
+                    .then(persistedApartment => {
                         
                         let apartment = objectId(persistedApartment._id)
                         let expectedKeys = parseKeys(item.Time)
@@ -375,7 +406,8 @@ function updateValuesInMemory(date, timezone) {
 
                         saveOrUpdateBooking({
                             apartment, expectedKeys, checkInDate, specifiedCheckOutTime, checkOutDate, checkOutTime, bookingCode
-                        }, false).then(savedOrUpdated => {
+                        }, false)
+                        .then(savedOrUpdated => {
                             count = count + 1;
                             departures.push(savedOrUpdated)
                             if (count === records.length){
@@ -403,7 +435,8 @@ function findApartmentAndInsertIfNotExisting(csvItem) {
     return new Promise((resolve, reject) => {
         let apartmentCode = parseInt(csvItem["Property ID"])
 
-        Apartment.findOne({"apartmentCode": apartmentCode}).then((apartment) => {
+        Apartment.findOne({"apartmentCode": apartmentCode})
+        .then((apartment) => {
             
             if (!apartment) {
                 const newApartment = new Apartment({
@@ -411,25 +444,32 @@ function findApartmentAndInsertIfNotExisting(csvItem) {
                     apartmentName: csvItem.Property,
                     keys: parseKeys(csvItem.Time)
                 })
-                newApartment.save().then((saved) => {
+                newApartment.save()
+                .then((saved) => {
                     resolve(saved)
+                    return
                 }).catch((err) => {
-                    Apartment.findOne({"apartmentCode": apartmentCode}).then((retry) => {
+                    Apartment.findOne({"apartmentCode": apartmentCode})
+                    .then((retry) => {
                         resolve(retry)
+                        return
                     }).catch((err) => {
                         reject(err)
+                        return 
                     })
                 })
             } else {
                 resolve(apartment)
+                return
             }
-        })
+        }).catch(error => reject(error))
     })
 }
 
 function saveOrUpdateBooking(booking, isArrival) {
     return new Promise((resolve, reject) => {
-        Booking.findOne({"bookingCode": booking.bookingCode, "apartment": booking.apartment}).then(persistedBooking => {
+        Booking.findOne({"bookingCode": booking.bookingCode, "apartment": booking.apartment})
+        .then(persistedBooking => {
             if (!persistedBooking) {
                 const newBooking = new Booking(booking)
                 newBooking.save()
@@ -457,7 +497,7 @@ function saveOrUpdateBooking(booking, isArrival) {
                     .then((savedBooking) => resolve(savedBooking))
                     .catch((error) => reject(error))
             }
-        })
+        }).catch(error => reject(error))
     })
 }
 
