@@ -10,83 +10,67 @@ const schedule = require('node-schedule');
 const {Booking, Apartment} = require("../mongoose_config");
 const objectId = require('mongoose').Types.ObjectId;
 const { parseKeys, parseTime, getArrivalDateFromLocaleString, getDepartureDateFromLocaleString } = require('../utils/utils')
-const { getStartOfDateFromEpoch, getCleaningDateRangeNoOffset } = require('../utils/timeUtils')
+const { getCleaningDateRangeNoOffset } = require('../utils/timeUtils')
 const wsServer = require('../ws_server');
 
 const saveRootPath = './uploaded_files'
 
-let currentIntervals = []
+let currentIntervals = null
 let changeToReadyToCleanTask = {}
 
-// TODO check if file exists
-const storage = multer.diskStorage({
-    
-    destination: function (req, file, cb) {
-      cb(null, saveRootPath)
-    },
-    filename: function (req, file, cb) {
-        let timezone = req.header('Time-Zone')
-        let date = getStartOfDateFromEpoch(parseInt(req.body.date), timezone)
-        let fileName = date.getTime() + ".csv"
-        if (fs.existsSync(saveRootPath+"/"+fileName)){
-            fs.unlinkSync(saveRootPath+"/"+fileName)
-        }
-        cb(null, fileName )
-    }
-  })
 
-const upload = multer({ storage })
-  
-router.post('/upload', upload.single('file'), function(req, res, next) {
-    
-    let timezone = req.header('Time-Zone')
-    let date = getStartOfDateFromEpoch(parseInt(req.body.date), timezone)
-
-    updateValuesInMemory(date, timezone)
-        .then(bookings => 
-            calculateIntervalByDate(date, timezone)
-                .then(intervals => res.status(200).send({bookings, intervals}))
-                .catch(err => res.status(400).send(err))
-        )
-        .catch(err => 
-            res.status(400).send(err)
-        )
-
-    // TODO add not cleaned apartments from previous days
-
-});
-
-router.put('', function(req, res, next) {
+router.put('', async function(req, res, next) {
     
     let timezone = req.header('Time-Zone')
     let intervalToUpdate = req.body
-    
-    const changed = changeCleaningStatus(intervalToUpdate.apartmentCode, intervalToUpdate.bookingCode, intervalToUpdate.cleaningStatus.cleaningStatus, intervalToUpdate.returnedKeys);
-    if (changeToReadyToCleanTask[intervalToUpdate.apartmentCode]){
-        changeToReadyToCleanTask[intervalToUpdate.apartmentCode].cancel()
-        delete changeToReadyToCleanTask[intervalToUpdate.apartmentCode]
-    }
 
-    if (changed){
-        res.status(200).send(changed)
+    try {
+        const changed = await changeCleaningStatus(intervalToUpdate.apartmentCode, intervalToUpdate.bookingCode, intervalToUpdate.cleaningStatus.cleaningStatus, intervalToUpdate.returnedKeys);
+
+        if (changeToReadyToCleanTask[intervalToUpdate.apartmentCode]){
+            changeToReadyToCleanTask[intervalToUpdate.apartmentCode].cancel()
+            delete changeToReadyToCleanTask[intervalToUpdate.apartmentCode]
+        }
+    
+        if (changed){
+            res.status(200).send(changed)
+            return;
+        }
+    } catch (error){
+        res.status(400).send({message: "Error"})
         return;
     }
+    
     
     res.status(404).send("Not found");
 
 });
 
-router.get('', function(req, res, next) {
+router.get('/:date', function(req, res, next) {
     
     let timezone = req.header('Time-Zone')
-    let intervalToUpdate = req.body
+    let date = req.params.date
+
+    if (!currentIntervals ) {
+        // todo check if new Date
+        calculateIntervalByDate(parseInt(date), timezone)
+        .then(intervals => {
+            currentIntervals = intervals
+            res.status(200).send(currentIntervals)
+        }).catch(err => {
+            res.status(400).send({ message: "Error"})
+        })
+    }else {
+        res.status(200).send(currentIntervals)
+    }
     
     // TODO use interval
     //wsServer.send("message")
-    res.status(200).send(currentIntervals)
+    
 
 });
 
+//kepe
 function calculateIntervalByDate(date, timezone) {
 
     const dateRange = getCleaningDateRangeNoOffset(date, timezone)
@@ -123,18 +107,22 @@ function scheduleReadyToCleanChangeStatus(interval) {
 }
 
 async function changeCleaningStatus(apartmentCode, bookingCode, newStatus, returnedKeys) {
-    for (let i = 0; i<currentIntervals; i++){
-        if (currentIntervals[i].apartmentCode === apartmentCode) {
-            currentIntervals[i].cleaningStatus = newStatus
-            break;
-        }
-    }
+    
     let updateInfo
     let dateNow = Date.now()
     let lastCleaningStatus = {
         cleaningStatus: newStatus,
         changeStatusDate: dateNow,
     }
+
+    for (let i = 0; i<currentIntervals.length; i++){
+        if (currentIntervals[i].apartmentCode === apartmentCode) {
+            currentIntervals[i].cleaningStatus = lastCleaningStatus
+            currentIntervals[i].returnedKeys = returnedKeys
+            break;
+        }
+    }
+
     if (newStatus === "READY_TO_CLEAN" && !!bookingCode){
         updateInfo = {
             lastCleaningStatus,
@@ -230,9 +218,9 @@ function calculateIntervals(arrivals, departures) {
             } else {
                 Apartment.findOne({"apartmentCode": arrival.apartment.apartmentCode})
                     .then((apartment) => {
-                        let cleaningStatus = []
+                        let cleaningStatus = null
                         if (apartment && apartment.lastCleaningStatus) {
-                            cleaningStatus = apartment.lastCleaningStatus.cleaningStatus
+                            cleaningStatus = apartment.lastCleaningStatus
                         }
                         intervals.push({
                             cleaningStatus: cleaningStatus,
@@ -240,7 +228,8 @@ function calculateIntervals(arrivals, departures) {
                             occupiedUntil: null,
                             apartmentName: arrival.apartment.apartmentName,
                             apartmentCode: arrival.apartment.apartmentCode,
-                            expectedKeys: arrival.apartment.expectedKeys,
+                            expectedKeys: arrival.apartment.keys,
+                            returnedKeys: null,
                             // TODO add info of lastBookingCode to apartments
                             bookingCode: null,
                             priorityType: "ARRIVAL"
@@ -290,7 +279,8 @@ function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateSta
         occupiedUntil: departure.checkOutDate,
         apartmentName: departure.apartment.apartmentName,
         apartmentCode: departure.apartment.apartmentCode,
-        expectedKeys: departure.apartment.expectedKeys,
+        expectedKeys: departure.apartment.keys,
+        returnedKeys: null,
         bookingCode: departure.bookingCode,
         priorityType: priorityType
     });

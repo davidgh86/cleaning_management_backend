@@ -13,6 +13,7 @@ var appartementsRouter = require('./routes/appartments');
 var usersRouter = require('./routes/user');
 var arrivalsRouter = require('./routes/arrivals');
 var intervalRouter = require('./routes/interval')
+var superControlRouter = require('./routes/bookingSuperControl')
 
 var app = express();
 
@@ -47,7 +48,8 @@ app.use(unless('/user/login', securityFilter.ensureAuthenticated))
 app.use('/user', usersRouter);
 app.use('/apartment', appartementsRouter);
 app.use('/arrival', arrivalsRouter);
-app.use('/interval', intervalRouter)
+app.use('/interval', intervalRouter);
+app.use('/superControlRouter', superControlRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

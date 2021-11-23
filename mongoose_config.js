@@ -1,7 +1,7 @@
 const mongoose = require('mongoose')
 const mongoosePaginate = require('mongoose-paginate-v2');
 
-mongoose.connect('mongodb://user:pwd@localhost:27017/cleaning');
+mongoose.connect(process.env['HSK_MANAGEMENT_MONGO']);
 
 const Schema = mongoose.Schema;
 
@@ -46,9 +46,8 @@ BookingSchema.plugin(mongoosePaginate);
 
 const User = mongoose.model('User', UserSchema)
 const Apartment = mongoose.model('Apartment', ApartmentSchema)
-const StatusChange = mongoose.model('StatusChange', StatusChangeSchema)
 const Booking = mongoose.model('Booking', BookingSchema)
 
-const models = { User, Apartment, StatusChange, Booking }
+const models = { User, Apartment, Booking }
 
 module.exports = models;
