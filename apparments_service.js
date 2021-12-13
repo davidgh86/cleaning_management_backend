@@ -4,6 +4,8 @@ const xml2js = require('xml2js');
 const mapper = require('./mapper')
 const ws_server = require('./ws_server')
 
+const logger = require('./logging')
+
 const xmlParser = new xml2js.Parser()
 
 const apiClient = axios.create({
@@ -26,11 +28,11 @@ const getAllAppartmentIds = new Promise((resolve, reject)=>{
         allAppartmentsIdCache.set(ALL_APPARTMENTS_IDS_CACHE_KEY, appartementsIds)
         resolve(appartementsIds)
       }).catch(error => {
-        console.log(error)
+        logger.log(error)
         reject(error)
       })
     }).catch(error => {
-      console.log(error)
+      logger.log(error)
       reject(error)
     })
   } else {
@@ -53,7 +55,7 @@ const getAppartementByIdRenew = (appartementId) =>
             pesistenceCache.set(appartementId, appartementInfo)
             resolve(appartementsIds)
           }).catch(error => {
-            console.log(error)
+            logger.log(error)
             reject(error)
           })
         }).catch((error) => reject(error))

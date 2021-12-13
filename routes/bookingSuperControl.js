@@ -5,6 +5,8 @@ const fs = require('fs')
 //const ensureIsAdmin = require('./../security_filter').ensureIsAdmin;
 const parse = require('csv-parse');
 
+const logger = require('./../logging')
+
 const schedule = require('node-schedule');
 
 const {Booking, Apartment} = require("../mongoose_config");
@@ -103,11 +105,11 @@ function updateValuesInMemory(date, timezone) {
                             }
                         }).catch(error => {
                             count = count + 1;
-                            console.error(error)
+                            logger.error(error)
                         })
                     }).catch(error => {
                         count = count + 1;
-                        console.error(error)
+                        logger.error(error)
                     })
                 })
             })
@@ -150,11 +152,11 @@ function updateValuesInMemory(date, timezone) {
                             }
                         }).catch(error => {
                             count = count + 1;
-                            console.error(error)
+                            logger.error(error)
                         })
                     }).catch(error => {
                         count = count + 1;
-                        console.error(error)
+                        logger.error(error)
                     })
                 })
             })

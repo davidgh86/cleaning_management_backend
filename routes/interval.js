@@ -15,6 +15,8 @@ const wsServer = require('../ws_server');
 
 const saveRootPath = './uploaded_files'
 
+const logger = require('./../logging')
+
 let currentIntervals = null
 let changeToReadyToCleanTask = {}
 
@@ -137,7 +139,7 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus, retur
     try {
         await Apartment.findOneAndUpdate({"apartmentCode" : apartmentCode}, updateInfo)
     } catch (error) {
-        console.log(error)
+        logger.log(error)
     }
     
     if (bookingCode) {
@@ -148,10 +150,10 @@ async function changeCleaningStatus(apartmentCode, bookingCode, newStatus, retur
             try {
                 booking = await booking.save()
             } catch (error) {
-                console.log(error)
+                logger.log(error)
             }
         } catch (error) {
-            console.log(error)
+            logger.log(error)
         }
     }
     let interval = currentIntervals.filter(int => int.apartmentCode === apartmentCode)
@@ -362,11 +364,11 @@ function updateValuesInMemory(date, timezone) {
                             }
                         }).catch(error => {
                             count = count + 1;
-                            console.error(error)
+                            logger.error(error)
                         })
                     }).catch(error => {
                         count = count + 1;
-                        console.error(error)
+                        logger.error(error)
                     })
                 })
             })
@@ -409,11 +411,11 @@ function updateValuesInMemory(date, timezone) {
                             }
                         }).catch(error => {
                             count = count + 1;
-                            console.error(error)
+                            logger.error(error)
                         })
                     }).catch(error => {
                         count = count + 1;
-                        console.error(error)
+                        logger.error(error)
                     })
                 })
             })
