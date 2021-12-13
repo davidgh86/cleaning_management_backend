@@ -1,2 +1,5 @@
 node_modules
 uploaded_files/*.csv
+
+public/*
+!public/readme.md
