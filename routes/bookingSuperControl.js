@@ -76,6 +76,14 @@ function updateValuesInMemory(date, timezone) {
                     reject(err)
                     return
                 }
+                if (!isArrivals(records)){
+                    arrivalsComplete = true
+                    records = []
+                    if (departureComplete){
+                        resolve({arrivals : [], departures})
+                        return
+                    }
+                }
                 let count = 0
                 records.forEach((item) => {
                     findApartmentAndInsertIfNotExisting(item)
@@ -113,7 +121,12 @@ function updateValuesInMemory(date, timezone) {
                     })
                 })
             })
-            let departuresCvs = filesContent[3]
+            let departuresCvs
+            if (filesContent.length > 3){
+                departuresCvs = filesContent[3]
+          } else {
+                departuresCvs = filesContent[1]
+            }
             parse(departuresCvs, {
                 columns: true,
                 delimiter: ",",
@@ -122,6 +135,14 @@ function updateValuesInMemory(date, timezone) {
                 if (err){
                     reject(err)
                     return
+                }
+                if (isArrivals(records)){
+                    departureComplete = true
+                    records = []
+                    if (arrivalsComplete){
+                        resolve({arrivals, departures : []})
+                        return
+                    }
                 }
                 let count = 0;
                 records.forEach((item) => {
@@ -162,6 +183,16 @@ function updateValuesInMemory(date, timezone) {
             })
         });
     });
+}
+
+function isArrivals(records){
+    let recordsLength = records.length;
+    for (let i = 1; i < recordsLength; i++){
+        if (records[0].Arrival !== records[i].Arrival){
+            return false;
+        }
+    }
+    return true;
 }
 
 function findApartmentAndInsertIfNotExisting(csvItem) {
