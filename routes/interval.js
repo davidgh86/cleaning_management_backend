@@ -53,7 +53,7 @@ router.get('/:date', function(req, res, next) {
     let timezone = req.header('Time-Zone')
     let date = req.params.date
 
-    if (!currentIntervals ) {
+    if (!currentIntervals || currentIntervals.length == 0 ) {
         // todo check if new Date
         calculateIntervalByDate(parseInt(date), timezone)
         .then(intervals => {
