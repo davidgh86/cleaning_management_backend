@@ -20,6 +20,10 @@ const logger = require('./../logging')
 let currentIntervals = null
 let changeToReadyToCleanTask = {}
 
+schedule.scheduleJob('* 23 * * *', function(){
+    currentIntervals = null
+    changeToReadyToCleanTask = {}
+});
 
 router.put('', async function(req, res, next) {
     
