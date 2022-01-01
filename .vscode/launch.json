@@ -11,6 +11,12 @@
             "type": "node-terminal"
         },
         {
+            "command": "node supercontrolBookingDownloader.js",
+            "name": "exec selenium",
+            "request": "launch",
+            "type": "node-terminal"
+        },
+        {
             "name": "Launch server",
             "program": "${workspaceFolder}/server.js",
             "request": "launch",

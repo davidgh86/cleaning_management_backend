@@ -14,8 +14,8 @@ const UserSchema = new Schema({
 UserSchema.plugin(mongoosePaginate);
 
 const StatusChangeSchema = new Schema({
-    cleaningStatus: { type: String, required: true, enum: ['OCCUPIED', 'READY_TO_CLEAN', 'ON_CLEANING', 'CLEAN'] },
-    changeStatusDate: { type: Date, required: true },
+    cleaningStatus: { type: String, required: false, enum: ['OCCUPIED', 'READY_TO_CLEAN', 'ON_CLEANING', 'CLEAN', 'UNKNOWN'] },
+    changeStatusDate: { type: Date, required: false },
 })
 
 const ApartmentSchema = new Schema({
@@ -36,7 +36,7 @@ const BookingSchema = new Schema({
     specifiedCheckInTime: Boolean,
     checkOutDate: { type: Date, required: true },
     specifiedCheckOutTime: Boolean,
-    cleaningStatusChangeLog: [StatusChangeSchema],
+    cleaningStatusChangeLog: { type: [StatusChangeSchema], default: [], required: false},
     timeCleaned: Date,
     message: String,
 })

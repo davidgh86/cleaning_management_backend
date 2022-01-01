@@ -52,22 +52,128 @@ router.put('', async function(req, res, next) {
 
 });
 
-router.get('/:date', function(req, res, next) {
+// router.get('/:date', function(req, res, next) {
+    
+//     let timezone = req.header('Time-Zone')
+//     let date = '1639997335000' //req.params.date
+
+//     if (!currentIntervals || currentIntervals.length == 0 ) {
+//         // todo check if new Date
+//         calculateIntervalByDate(parseInt(date), timezone)
+//         .then(intervals => {
+//             currentIntervals = intervals
+//             res.status(200).send(currentIntervals)
+//         }).catch(err => {
+//             res.status(400).send({ message: "Error"})
+//         })
+//     }else {
+//         res.status(200).send(currentIntervals)
+//     }
+    
+//     // TODO use interval
+//     //wsServer.send("message")
+    
+
+// });
+
+router.get('/:date', async function(req, res, next) {
+
+    if (currentIntervals && currentIntervals.length > 0){
+        res.status(200).send(currentIntervals)
+        return;
+    }
     
     let timezone = req.header('Time-Zone')
     let date = req.params.date
 
-    if (!currentIntervals || currentIntervals.length == 0 ) {
-        // todo check if new Date
-        calculateIntervalByDate(parseInt(date), timezone)
-        .then(intervals => {
-            currentIntervals = intervals
-            res.status(200).send(currentIntervals)
-        }).catch(err => {
-            res.status(400).send({ message: "Error"})
+    const dateRange = getCleaningDateRangeNoOffset(parseInt(date), timezone)
+
+    try {
+        let arrivals = await Booking.find({ $and: [{'checkInDate' : {$gte: dateRange.start, $lte: dateRange.end }}]}).populate('apartment')
+        let departures = await Booking.find({ $and: [{'checkOutDate' : {$gte: dateRange.start, $lte: dateRange.end }}]}).populate('apartment')
+
+        const departuresToUpdate = []
+        const apartmentUpdateStatus = {}
+        const intervals = []
+
+        arrivalApartmentCodes = new Set(arrivals.map(arrival => arrival.apartment.apartmentCode))
+        departureApartmentCodes = new Set(departures.map(departure => departure.apartment.apartmentCode))
+
+        apartmentsCodesLeftAndOccupiedToday = new Set([...arrivalApartmentCodes].filter(arrivalAptCode => departureApartmentCodes.has(arrivalAptCode)));
+        // apartmentsCodesToBeOccupiedToday = new Set([...arrivalApartmentCodes].filter(arrivalAptCode => !departureApartmentCodes.has(arrivalAptCode)));
+        // apartmentsCodesToBeLeftToday = new Set([...departureApartmentCodes].filter(departureAptCode => !arrivalApartmentCodes.has(departureAptCode)));
+
+        arrivals.forEach(async (arrival) => {
+            if (apartmentsCodesLeftAndOccupiedToday.has(arrival.apartment.apartmentCode)){
+                // arrivals when departure same day
+                departures.forEach(departure => {
+                    if (departure.apartment.apartmentCode === arrival.apartment.apartmentCode) {
+                        updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "ARRIVAL", arrival.checkInDate);
+                    }
+                })
+            } else {
+                try {
+                    let apartment = await Apartment.findOne({"apartmentCode": arrival.apartment.apartmentCode});
+
+                    let cleaningStatus = null
+                    if (apartment && apartment.lastCleaningStatus) {
+                        cleaningStatus = apartment.lastCleaningStatus
+                    }
+                    intervals.push({
+                        cleaningStatus: cleaningStatus,
+                        limitTime: arrival.checkInDate,
+                        occupiedUntil: null,
+                        apartmentName: arrival.apartment.apartmentName,
+                        apartmentCode: arrival.apartment.apartmentCode,
+                        expectedKeys: arrival.apartment.keys,
+                        returnedKeys: null,
+                        // TODO add info of lastBookingCode to apartments
+                        bookingCode: null,
+                        priorityType: "ARRIVAL"
+                    })
+                } catch (error) {
+                    console.log(error)
+                }
+            }
         })
-    }else {
+
+        departureApartmentCodesToBeOccupiedAnotherDay = new Set(departures.filter(departure => !arrivalApartmentCodes.has(departure.apartment.apartmentCode)))
+        departureApartmentCodesToBeOccupiedAnotherDay.forEach(departure => {
+            updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateStatus, intervals, "DEPARTURE", null);
+        })
+
+        currentIntervals = intervals
+
+        departuresToUpdate.forEach(async departure => {
+            try {
+                await departure.save();
+            } catch (error) {
+                console.error(error);
+            }
+        })
+        for (var key in apartmentUpdateStatus) {
+            if (apartmentUpdateStatus[key].cleaningStatus){
+                try {
+                    await Apartment.findOneAndUpdate({"apartmentCode" : key}, { lastCleaningStatus : apartmentUpdateStatus[key]})
+                } catch (error) {
+                    console.error(error)
+                }
+            }
+        }
+
+        intervals.forEach(interval => {
+            if (apartmentsCodesLeftAndOccupiedToday.has(interval.apartmentCode)) {
+                scheduleReadyToCleanChangeStatus(interval)
+            }
+        })
+        
+        currentIntervals = intervals
+
         res.status(200).send(currentIntervals)
+
+    } catch (error) {
+        console.error(error)
+        res.status(500).end()
     }
     
     // TODO use interval
@@ -103,12 +209,13 @@ function calculateIntervalByDate(date, timezone) {
 }
 
 function scheduleReadyToCleanChangeStatus(interval) {
-    if (interval && interval.cleaningStatus && interval.occupiedUntil && interval.cleaningStatus === "OCCUPIED") {
-
-        changeToReadyToCleanTask[interval.apartmentCode] = schedule.scheduleJob(date, function(){
-            changeCleaningStatus(interval.apartmentCode, interval.bookingCode, "READY_TO_CLEAN")
-            delete changeToReadyToCleanTask[interval.apartmentCode]
-        });
+    if (interval && interval.cleaningStatus && interval.occupiedUntil && (interval.cleaningStatus.cleaningStatus === "OCCUPIED" ||  interval.cleaningStatus.cleaningStatus === "UNKNOWN")) {
+        if (interval.occupiedUntil > Date.now()) {
+            changeToReadyToCleanTask[interval.apartmentCode] = schedule.scheduleJob(interval.occupiedUntil, function(){
+                changeCleaningStatus(interval.apartmentCode, interval.bookingCode, "READY_TO_CLEAN")
+                delete changeToReadyToCleanTask[interval.apartmentCode]
+            });
+        }
     }
 }
 
@@ -229,7 +336,7 @@ function calculateIntervals(arrivals, departures) {
                             cleaningStatus = apartment.lastCleaningStatus
                         }
                         intervals.push({
-                            cleaningStatus: cleaningStatus,
+                            cleaningStatus: cleaningStatus ? cleaningStatus : 'UNKNOWN',
                             limitTime: arrival.checkInDate,
                             occupiedUntil: null,
                             apartmentName: arrival.apartment.apartmentName,
@@ -271,7 +378,7 @@ function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateSta
     let { currentStatus, newStatus, currentDate } = getStatusTransition(departure);
     if (currentStatus !== newStatus) {
         changeStatus = {
-            cleaningStatus: newStatus,
+            cleaningStatus: newStatus ? newStatus : 'UNKNOWN',
             changeStatusDate: currentDate
         };
         departure.cleaningStatusChangeLog.push(changeStatus);
@@ -280,7 +387,7 @@ function updateDepartureStatus(departure, departuresToUpdate, apartmentUpdateSta
     }
 
     intervals.push({
-        cleaningStatus: (newStatus) ? newStatus : currentStatus,
+        cleaningStatus: (newStatus) ? newStatus : (currentStatus ? currentStatus : 'UNKNOWN'),
         limitTime: limitTime,
         occupiedUntil: departure.checkOutDate,
         apartmentName: departure.apartment.apartmentName,
