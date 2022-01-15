@@ -36,7 +36,9 @@ const storage = multer.diskStorage({
 
 schedule.scheduleJob('* 23 * * *', function(){
     let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    let date = getStartOfDateFromEpoch(parseInt(new Date(Date.now())/1), timezone)
+    let date = new Date(Date.now())
+    date.setDate(result.getDate() + 1)
+    date = getStartOfDateFromEpoch(parseInt(date/1), timezone)
     let fileName = date.getTime() + ".csv"
     download(new Date(Date.now()), new Date(Date.now()), "andres@dublincityapartments.ie", "Briego912Celeste:)", saveRootPath+"/"+fileName)
 });
