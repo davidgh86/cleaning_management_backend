@@ -13,6 +13,7 @@ const {Booking, Apartment} = require("../mongoose_config");
 const objectId = require('mongoose').Types.ObjectId;
 const { parseKeys, parseTime, getArrivalDateFromLocaleString, getDepartureDateFromLocaleString } = require('../utils/utils')
 const { getStartOfDateFromEpoch } = require('../utils/timeUtils')
+const download = require('../supercontrolBookingDownloader')
 
 const saveRootPath = './uploaded_files'
 
@@ -32,6 +33,13 @@ const storage = multer.diskStorage({
         cb(null, fileName )
     }
   })
+
+schedule.scheduleJob('* 23 * * *', function(){
+    let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    let date = getStartOfDateFromEpoch(parseInt(new Date(Date.now())/1), timezone)
+    let fileName = date.getTime() + ".csv"
+    download(new Date(Date.now()), new Date(Date.now()), "andres@dublincityapartments.ie", "Briego912Celeste:)", saveRootPath+"/"+fileName)
+});
 
 const upload = multer({ storage })
   

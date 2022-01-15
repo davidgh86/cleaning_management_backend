@@ -2,7 +2,6 @@ var express = require('express');
 var router = express.Router();
 const ensureIsAdmin = require('./../security_filter').ensureIsAdmin;
 const Booking = require("../mongoose_config").Booking
-//const objectId = require('mongodb').ObjectID;
 const objectId = require('mongoose').Types.ObjectId;
 
 const { getCleaningDateRange } = require('../utils/timeUtils')
@@ -12,7 +11,6 @@ router.post('', ensureIsAdmin, function(req, res, next) {
     const apartmentId = req.body.apartmentId
     const checkInDate = req.body.checkInDate
     const checkOutDate = req.body.checkOutDate
-    // const timezone = req.header('Time-Zone')
 
     checkBookingBetweenDates(apartmentId, checkInDate, checkOutDate).then((existsBooking) => {
         if (existsBooking){
