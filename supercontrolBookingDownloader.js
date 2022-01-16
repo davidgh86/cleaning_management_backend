@@ -4,7 +4,14 @@ const puppeteer = require('puppeteer');
 async function download(startDate, endDate, username, password, path) {
 
     const browser = await puppeteer.launch({
-        slowMo: 1000
+        slowMo: 1000,
+        headless: true,
+        args: [
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--disable-setuid-sandbox",
+            "--no-sandbox",
+        ]
       });
 
 
