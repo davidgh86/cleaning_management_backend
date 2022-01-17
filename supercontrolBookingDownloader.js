@@ -1,7 +1,10 @@
 const fs = require('fs')
 const puppeteer = require('puppeteer');
+const logger = require('./logging')
 
 async function download(startDate, endDate, username, password, path) {
+
+    logger.info("downloading csv")
 
     const browser = await puppeteer.launch({
         slowMo: 1000,
@@ -24,6 +27,8 @@ async function download(startDate, endDate, username, password, path) {
 
     await page.waitForTimeout(5000)
 
+    logger.info("log into supercontrol successful")
+
     let csvUrl = getDownloadUrl(startDate, endDate);
 
     let response 
@@ -44,6 +49,8 @@ async function download(startDate, endDate, username, password, path) {
     await page.waitForTimeout(5000)
 
     await browser.close();
+
+    logger.info("downloaded csv")
 }
 
 function getDownloadUrl(startDate, endDate) {
