@@ -41,7 +41,12 @@ schedule.scheduleJob('* 23 * * *', async function(){
     date = getStartOfDateFromEpoch(parseInt(date/1), timezone)
     let fileName = date.getTime() + ".csv"
     download(new Date(Date.now()), new Date(Date.now()), "andres@dublincityapartments.ie", "Briego912Celeste:)", saveRootPath+"/"+fileName)
-    await updateValuesInMemory(date, timezone)
+    try {
+        await updateValuesInMemory(date, timezone)
+    }catch (e){
+        console.error(e)
+    }
+    
 });
 
 const upload = multer({ storage })
