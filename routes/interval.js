@@ -20,7 +20,7 @@ const logger = require('./../logging')
 let currentIntervals = null
 let changeToReadyToCleanTask = {}
 
-schedule.scheduleJob('50 23 * * *', function(){
+schedule.scheduleJob('59 23 * * *', function(){
     currentIntervals = null
     changeToReadyToCleanTask = {}
 });

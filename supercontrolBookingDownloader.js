@@ -54,15 +54,11 @@ async function download(startDate, endDate, username, password, path) {
 }
 
 function getDownloadUrl(startDate, endDate) {
-    let startYear = startDate.getFullYear();
-    let startMonth = ('00' + startDate.getMonth() + 1).slice(-2);
-    let startDay = ('00' + startDate.getDate()).slice(-2);
+    let isoStartDate = startDate.toISOString().split('T')[0];
 
-    let endYear = endDate.getFullYear();
-    let endMonth = ('00' + endDate.getMonth() + 1).slice(-2);
-    let endDay = ('00' + endDate.getDate()).slice(-2);
+    let isoEndDate = endDate.toISOString().split('T')[0];
 
-    return `https://secure.supercontrol.co.uk/control/convertCSV.asp?fn=arrivals-departures&table=arrivals_mobile.asp%3Fstartdate%3D${startYear}-${startMonth}-${startDay}%26enddate%3D${endYear}-${endMonth}-${endDay}%26report_type%3Dad%26cleanerID%3D%26managerID%3D%26ownerbookings%3Dfalse%26crossupdateID%3Dfalse%26arrivals_hideArchived%3Dfalse%26arrivals_propertyclosed%3Dfalse%26arrivals_arrived%3Dfalse%26action%3DLoadReport%26format%3Dcsv`;
+    return `https://secure.supercontrol.co.uk/control/convertCSV.asp?fn=arrivals-departures&table=arrivals_mobile.asp%3Fstartdate%3D${isoStartDate}%26enddate%3D${isoEndDate}%26report_type%3Dad%26cleanerID%3D%26managerID%3D%26ownerbookings%3Dfalse%26crossupdateID%3Dfalse%26arrivals_hideArchived%3Dfalse%26arrivals_propertyclosed%3Dfalse%26arrivals_arrived%3Dfalse%26action%3DLoadReport%26format%3Dcsv`;
 }
 
 module.exports = download
