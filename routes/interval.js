@@ -46,35 +46,44 @@ router.put('', async function(req, res, next) {
         res.status(400).send({message: "Error"})
         return;
     }
-    
-    
+        
     res.status(404).send("Not found");
 
 });
 
-// router.get('/:date', function(req, res, next) {
-    
-//     let timezone = req.header('Time-Zone')
-//     let date = '1639997335000' //req.params.date
+router.put('/message/:code', function(req, res, next) {
 
-//     if (!currentIntervals || currentIntervals.length == 0 ) {
-//         // todo check if new Date
-//         calculateIntervalByDate(parseInt(date), timezone)
-//         .then(intervals => {
-//             currentIntervals = intervals
-//             res.status(200).send(currentIntervals)
-//         }).catch(err => {
-//             res.status(400).send({ message: "Error"})
-//         })
-//     }else {
-//         res.status(200).send(currentIntervals)
-//     }
-    
-//     // TODO use interval
-//     //wsServer.send("message")
-    
+    let apartmentCode = parseInt(req.params.code)
 
-// });
+    let body = req.body
+
+    if (!body.message){
+        res.status(404).send("Not found")
+    }
+
+    let newMessage = body.message
+
+    let interval = null
+
+    for (let i in currentIntervals) {
+        if (currentIntervals[i].apartmentCode === apartmentCode) {
+            interval = currentIntervals[i]
+            if (!interval.messages) {
+                interval.messages = []
+            }
+            interval.messages.push(newMessage);
+            currentIntervals[i] = interval
+
+            wsServer.send(JSON.stringify(interval))
+        }
+    }
+
+    if (interval) {
+        res.status(200).send(interval)
+    } else {
+        res.status(404).send("Not found")
+    }
+});
 
 router.get('/:date', async function(req, res, next) {
 
@@ -100,8 +109,6 @@ router.get('/:date', async function(req, res, next) {
         departureApartmentCodes = new Set(departures.map(departure => departure.apartment.apartmentCode))
 
         apartmentsCodesLeftAndOccupiedToday = new Set([...arrivalApartmentCodes].filter(arrivalAptCode => departureApartmentCodes.has(arrivalAptCode)));
-        // apartmentsCodesToBeOccupiedToday = new Set([...arrivalApartmentCodes].filter(arrivalAptCode => !departureApartmentCodes.has(arrivalAptCode)));
-        // apartmentsCodesToBeLeftToday = new Set([...departureApartmentCodes].filter(departureAptCode => !arrivalApartmentCodes.has(departureAptCode)));
 
         arrivals.forEach(async (arrival) => {
             if (apartmentsCodesLeftAndOccupiedToday.has(arrival.apartment.apartmentCode)){
@@ -176,13 +183,10 @@ router.get('/:date', async function(req, res, next) {
         res.status(500).end()
     }
     
-    // TODO use interval
-    //wsServer.send("message")
-    
 
 });
 
-//kepe
+
 function calculateIntervalByDate(date, timezone) {
 
     const dateRange = getCleaningDateRangeNoOffset(date, timezone)
